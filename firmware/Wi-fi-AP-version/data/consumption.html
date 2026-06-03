@@ -1,0 +1,490 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Consumption — OBD-II</title>
+<script>
+  // Apply saved theme before render — prevents dark→light flash on page load
+  (function() {
+    const t = localStorage.getItem('obd_theme');
+    if (t === 'light') document.documentElement.setAttribute('data-theme', 'light');
+  })();
+</script>
+<link rel="stylesheet" href="style.css">
+<script src="chart.min.js"></script>
+<script src="hammer.min.js"></script>
+<script src="chartsjs-plugin-zoom.js"></script>
+<style>
+/* ── SPOTŘEBA KARTY ──────────────────────────────────────────── */
+.cons-triple {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 10px;
+  margin-bottom: 16px;
+}
+@media(max-width:480px){ .cons-triple { grid-template-columns: 1fr; } }
+
+.cons-counter {
+  border-radius: var(--radius);
+  padding: 16px;
+  text-align: center;
+  position: relative;
+}
+.cons-counter .cc-label {
+  font-size: 9px;
+  font-weight: 600;
+  letter-spacing: .15em;
+  text-transform: uppercase;
+  color: var(--muted-foreground);
+  margin-bottom: 8px;
+}
+.cons-counter .cc-liters {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 28px;
+  font-weight: 700;
+  color: var(--primary);
+  text-shadow: 0 0 20px var(--primary-glow);
+  line-height: 1;
+}
+.cons-counter .cc-unit {
+  font-size: 11px;
+  color: var(--muted-foreground);
+  margin-top: 3px;
+  letter-spacing: .1em;
+}
+.cons-counter .cc-avg {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 13px;
+  color: var(--foreground);
+  margin-top: 6px;
+}
+.cons-counter .cc-avg span {
+  color: var(--muted-foreground);
+  font-size: 11px;
+}
+.cons-counter .cc-reset {
+  position: absolute;
+  top: 8px; right: 8px;
+  font-size: 9px;
+  padding: 3px 7px;
+  border-radius: 5px;
+  border: 1px solid var(--border);
+  background: var(--secondary);
+  color: var(--muted-foreground);
+  cursor: pointer;
+  letter-spacing: .05em;
+  text-transform: uppercase;
+  transition: all .2s;
+}
+.cons-counter .cc-reset:hover { border-color: var(--primary); color: var(--primary); }
+
+/* ── INSTANT HERO ────────────────────────────────────────────── */
+.cons-instant {
+  border-radius: var(--radius);
+  padding: 20px;
+  text-align: center;
+  margin-bottom: 16px;
+}
+.cons-instant .ci-label {
+  font-size: 10px;
+  letter-spacing: .3em;
+  text-transform: uppercase;
+  color: hsla(215,15%,50%,.6);
+  margin-bottom: 6px;
+}
+.cons-instant .ci-num {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: clamp(42px, 10vw, 60px);
+  font-weight: 700;
+  color: var(--primary);
+  text-shadow: 0 0 30px var(--primary-glow);
+  line-height: 1;
+}
+.cons-instant .ci-unit {
+  font-size: 14px;
+  color: var(--muted-foreground);
+  margin-top: 4px;
+  letter-spacing: .1em;
+}
+
+/* ── EXPORT BTN ──────────────────────────────────────────────── */
+.export-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 16px;
+  border-radius: 8px;
+  border: 1px solid var(--border);
+  background: var(--secondary);
+  color: var(--foreground);
+  font-size: 11px;
+  font-weight: 600;
+  cursor: pointer;
+  letter-spacing: .06em;
+  text-transform: uppercase;
+  transition: border-color .2s;
+}
+.export-btn:hover { border-color: var(--primary); color: var(--primary); }
+</style>
+</head>
+<body>
+
+<!-- ══ Theme BUTTON ══════════════════════════════════════════════════════ -->
+  <button class="theme-toggle" onclick="toggleTheme()" aria-label="Toggle theme">
+  <svg class="icon-moon" viewBox="0 0 24 24"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/></svg>
+  <svg class="icon-sun" viewBox="0 0 24 24"><circle cx="12" cy="12" r="5"/><line x1="12" y1="1" x2="12" y2="3"/><line x1="12" y1="21" x2="12" y2="23"/><line x1="4.22" y1="4.22" x2="5.64" y2="5.64"/><line x1="18.36" y1="18.36" x2="19.78" y2="19.78"/><line x1="1" y1="12" x2="3" y2="12"/><line x1="21" y1="12" x2="23" y2="12"/><line x1="4.22" y1="19.78" x2="5.64" y2="18.36"/><line x1="18.36" y1="5.64" x2="19.78" y2="4.22"/></svg>
+</button>
+<script>
+  function toggleTheme() {
+    const cur = document.documentElement.getAttribute('data-theme');
+    const next = cur === 'light' ? 'dark' : 'light';
+    if (next === 'light') {
+      document.documentElement.setAttribute('data-theme', 'light');
+      localStorage.setItem('obd_theme', 'light');
+    } else {
+      document.documentElement.removeAttribute('data-theme');
+      localStorage.setItem('obd_theme', 'dark');
+    }
+  }
+</script>
+
+<div class="page active" style="display:block">
+
+  <div class="page-header">
+    <a href="dashboard.html" class="back-btn">
+      <svg viewBox="0 0 24 24"><polyline points="15 18 9 12 15 6"/></svg>
+    </a>
+    <div>
+      <div class="page-title">Consumption</div>
+      <div class="page-subtitle">Fuel Consumption</div>
+    </div>
+  </div>
+
+  <div id="consumption-content"></div>
+
+</div>
+
+<!-- Bottom nav -->
+<nav class="bottom-nav">
+  <div class="nav-inner">
+    <button class="nav-item" id="nb-cockpit" onclick="window.location.href='dashboard.html'">
+      <svg viewBox="0 0 24 24"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/></svg>
+      <span class="nav-label">Cockpit</span>
+    </button>
+    <button class="nav-item" id="nb-vehicle-data" onclick="window.location.href='vehicle-data.html'">
+      <svg viewBox="0 0 24 24"><ellipse cx="12" cy="5" rx="9" ry="3"/><path d="M21 12c0 1.66-4 3-9 3s-9-1.34-9-3"/><path d="M3 5v14c0 1.66 4 3 9 3s9-1.34 9-3V5"/></svg>
+      <span class="nav-label">Data</span>
+    </button>
+    <button class="nav-item" id="nb-graphs" onclick="window.location.href='graphs.html'">
+      <svg viewBox="0 0 24 24"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg>
+      <span class="nav-label">Graphs</span>
+    </button>
+    <button class="nav-item" id="nb-alarms" onclick="window.location.href='alarms.html'">
+      <svg viewBox="0 0 24 24"><path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 0 1-3.46 0"/></svg>
+      <span class="nav-label">Alarms</span>
+    </button>
+    <button class="nav-item active" id="nb-consumption" onclick="window.location.href='consumption.html'">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <path d="M14 3H5a1 1 0 0 0-1 1v16a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1V9"/>
+        <path d="M14 3v6h4"/>
+        <path d="M18 9l3-3"/>
+        <path d="M21 6V3h-3"/>
+        <line x1="7" y1="13" x2="15" y2="13"/>
+        <line x1="7" y1="17" x2="15" y2="17"/>
+      </svg>
+      <span class="nav-label">Consumption</span>
+    </button>
+
+  </div>
+</nav>
+
+<script type="module">
+import { getData } from './data.js';
+
+Chart.defaults.color = 'hsl(215,15%,50%)';
+Chart.defaults.borderColor = 'hsla(220,15%,20%,0.5)';
+Chart.defaults.font.family = "'JetBrains Mono', monospace";
+Chart.defaults.font.size = 10;
+
+const firstData = getData();
+const hasFuel = firstData.fuelConsumption != null;
+const content = document.getElementById('consumption-content');
+
+if (!hasFuel) {
+  content.innerHTML = `
+    <div class="glass-card" style="border-radius:var(--radius);padding:40px;text-align:center;margin-bottom:20px">
+      <div style="font-size:40px;margin-bottom:16px">⛽</div>
+      <div style="font-size:16px;font-weight:700;color:var(--muted-foreground);margin-bottom:8px">Consumption not available</div>
+      <div style="font-size:13px;color:var(--muted-foreground);max-width:300px;margin:0 auto">
+        This vehicle does not support the fuel consumption PID (0x5E).
+      </div>
+    </div>
+    <div style="text-align:center">
+      <a href="vehicle-data.html" style="display:inline-block;padding:10px 20px;border-radius:var(--radius);background:var(--primary);color:white;font-size:13px;font-weight:600;text-decoration:none">
+        Show available data →
+      </a>
+    </div>`;
+} else {
+
+  content.innerHTML = `
+    <!-- Okamžitá spotřeba -->
+    <div class="cons-instant glass-card">
+      <div class="ci-label">Instant Consumption</div>
+      <div class="ci-num" id="ci-num">—</div>
+      <div class="ci-unit">L / 100 km</div>
+    </div>
+
+    <!-- 3 počítadla -->
+    <div class="cons-triple">
+      <!-- Od startu -->
+      <div class="cons-counter glass-card">
+        <button class="cc-reset" id="btn-reset-start">Reset</button>
+        <div class="cc-label">Since start</div>
+        <div class="cc-liters" id="ct-start-avg" style="font-size:32px">—</div>
+        <div class="cc-unit">L / 100 km</div>
+      </div>
+
+      <!-- Od načerpání -->
+      <div class="cons-counter glass-card">
+        <button class="cc-reset" id="btn-reset-fill">Reset</button>
+        <div class="cc-label">Since refuel</div>
+        <div class="cc-liters" id="ct-fill-avg" style="font-size:32px">—</div>
+        <div class="cc-unit">L / 100 km</div>
+      </div>
+
+      <!-- Dlouhodobá -->
+      <div class="cons-counter glass-card">
+        <button class="cc-reset" id="btn-reset-long">Reset</button>
+        <div class="cc-label">Long-term</div>
+        <div class="cc-liters" id="ct-long-avg" style="font-size:32px">—</div>
+        <div class="cc-unit">L / 100 km</div>
+      </div>
+    </div>
+
+    <!-- Graf -->
+    <div class="glass-card" style="border-radius:var(--radius);padding:14px;margin-bottom:16px">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px">
+        <div style="font-size:10px;font-weight:600;letter-spacing:.15em;text-transform:uppercase;color:var(--muted-foreground)">Consumption Trend</div>
+        <div style="display:flex;gap:14px;font-size:9px;color:var(--muted-foreground)">
+          <span><span style="display:inline-block;width:12px;height:2px;background:#1C69D4;vertical-align:middle;margin-right:4px;border-radius:1px"></span>L/100km</span>
+          <span><span style="display:inline-block;width:12px;height:2px;background:#FF6B00;vertical-align:middle;margin-right:4px;border-radius:1px"></span>L/h</span>
+        </div>
+      </div>
+      <div style="height:180px">
+        <canvas id="cons-chart"></canvas>
+      </div>
+    </div>
+    <!-- Export -->
+    <div style="display:flex;gap:8px;margin-bottom:20px">
+      <button class="export-btn" id="btn-reset-zoom">
+        ↺ Reset zoom
+        </button>  
+      <button class="export-btn" id="btn-export">
+        📥 Export CSV
+      </button>
+    </div>
+  `;
+
+  // ── localStorage pro "od načerpání" a "dlouhodobou" ───────────────
+  const LS_FILL = 'obd_cons_fill';
+  const LS_LONG = 'obd_cons_long';
+
+  function loadCounter(key) {
+    try { return JSON.parse(localStorage.getItem(key)) || { liters: 0, dist: 0 }; }
+    catch { return { liters: 0, dist: 0 }; }
+  }
+  function saveCounter(key, obj) {
+    localStorage.setItem(key, JSON.stringify(obj));
+  }
+
+  // Počítadla
+  let startL = 0, startDist = 0;                    // od startu — jen v paměti
+  let fillC  = loadCounter(LS_FILL);                 // od načerpání — localStorage
+  let longC  = loadCounter(LS_LONG);                 // dlouhodobá — localStorage
+
+  // Reset tlačítka
+  document.getElementById('btn-reset-fill').addEventListener('click', () => {
+    fillC = { liters: 0, dist: 0 };
+    saveCounter(LS_FILL, fillC);
+  });
+  document.getElementById('btn-reset-long').addEventListener('click', () => {
+    if (!confirm('Reset long-term consumption?')) return;
+    longC = { liters: 0, dist: 0 };
+    saveCounter(LS_LONG, longC);
+  });
+
+// ── Chart.js ──────────────────────────────────────────────────────
+  let userZoomed = false;
+ 
+  const ctx = document.getElementById('cons-chart').getContext('2d');
+  const chart = new Chart(ctx, {
+    type: 'line',
+    data: {
+      labels: [],
+      datasets: [
+        {
+          label: 'L/100km',
+          data: [],
+          borderColor: '#1C69D4',
+          borderWidth: 2,
+          tension: 0.3,
+          pointRadius: 0,
+          fill: true,
+          backgroundColor: '#1C69D418',
+        },
+        {
+          label: 'L/h',
+          data: [],
+          borderColor: '#FF6B00',
+          borderWidth: 1.5,
+          tension: 0.3,
+          pointRadius: 0,
+          fill: false,
+        },
+      ]
+    },
+    options: {
+      animation: false,
+      responsive: true,
+      maintainAspectRatio: false,
+      interaction: { mode: 'index', intersect: false },
+      scales: {
+        x: {
+          ticks: { maxTicksLimit: 6, maxRotation: 0, font: { size: 9 } },
+          grid: { color: 'hsla(220,15%,20%,0.4)' }
+        },
+        y: {
+          title: { display: true, text: 'L/100km · L/h', color: 'hsl(215,15%,40%)', font: { size: 9 } },
+          ticks: { font: { size: 9 } },
+          grid: { color: 'hsla(220,15%,20%,0.4)' }
+        }
+      },
+      plugins: {
+        legend: { display: false },
+        tooltip: {
+          backgroundColor: 'hsla(220,18%,14%,0.95)',
+          borderColor: 'hsl(220,15%,25%)',
+          borderWidth: 1,
+        },
+        zoom: {
+          zoom: {
+            wheel: { enabled: true },
+            pinch: { enabled: true },
+            mode: 'x',
+            onZoom: () => { userZoomed = true; }
+          },
+          pan: {
+            enabled: true,
+            mode: 'x',
+            onPan: () => { userZoomed = true; }
+          }
+        }
+      }
+    }
+  });
+
+  // ── Historie pro CSV ───────────────────────────────────────────────
+  const csvHistory = [];
+  const MAX_CHART = 60;
+
+  // ── Integrace ──────────────────────────────────────────────────────
+  let lastTime = Date.now();
+  let lastSpeed = 0;
+
+  function integrate(d) {
+    const now = Date.now();
+    const dtH = (now - lastTime) / 3600000; // delta čas v hodinách
+    lastTime = now;
+
+    const lh   = d.fuelConsumption;
+    const spd  = d.speed ?? 0;
+    const avgSpd = (spd + lastSpeed) / 2;
+    lastSpeed = spd;
+
+    const litres = lh * dtH;          // spotřebované litry za delta t
+    const km     = avgSpd * dtH;      // ujetá vzdálenost za delta t
+
+    // Přičti ke všem počítadlům
+    startL    += litres;
+    startDist += km;
+    fillC.liters += litres;  fillC.dist += km;
+    longC.liters += litres;  longC.dist += km;
+
+    // Uložit každých ~5s (aby se localStorage nezahltilo)
+    return { litres, km, lh, spd };
+  }
+
+  function avgLp100(liters, dist) {
+    return dist > 0.05 ? (liters / dist) * 100 : null;
+  }
+
+  function fmtAvg(liters, dist) {
+    const v = avgLp100(liters, dist);
+    return v ? v.toFixed(1) : '—';
+  }
+
+  // ── Update smyčka ──────────────────────────────────────────────────
+  let frame = 0;
+  let saveTimer = 0;
+
+  function update() {
+    const d = getData();
+    frame++;
+
+    const { lh, spd } = integrate(d);
+    const lp100 = spd > 5 ? (lh / spd) * 100 : null;
+
+    // Okamžitá spotřeba
+    document.getElementById('ci-num').textContent = lp100 ? lp100.toFixed(1) : '—';
+
+    // 3 počítadla
+    document.getElementById('ct-start-avg').textContent = fmtAvg(startL, startDist);
+    document.getElementById('ct-fill-avg').textContent  = fmtAvg(fillC.liters, fillC.dist);
+    document.getElementById('ct-long-avg').textContent  = fmtAvg(longC.liters, longC.dist);
+
+    // Graf každých 5 framů
+    if (frame % 5 === 0) {
+      const now = new Date().toLocaleTimeString();
+      chart.data.labels.push(now);
+      chart.data.datasets[0].data.push(lp100 ?? 0);
+      chart.data.datasets[1].data.push(lh);
+      if (chart.data.labels.length > MAX_CHART) {
+        chart.data.labels.shift();
+        chart.data.datasets.forEach(ds => ds.data.shift());
+      }
+      chart.update('none');
+
+      // CSV history
+      csvHistory.push({ time: now, lp100: lp100?.toFixed(1) ?? '—', lh: lh.toFixed(2), spd: Math.round(spd) });
+      if (csvHistory.length > 500) csvHistory.shift();
+    }
+
+    // Uložit localStorage každých ~5s
+    saveTimer += 200;
+    if (saveTimer >= 5000) {
+      saveCounter(LS_FILL, fillC);
+      saveCounter(LS_LONG, longC);
+      saveTimer = 0;
+    }
+  }
+
+  // ── CSV Export ────────────────────────────────────────────────────
+  document.getElementById('btn-export').addEventListener('click', () => {
+    if (!csvHistory.length) return;
+    const header = 'Time,L/100km,L/h,Speed km/h\n';
+    const rows = csvHistory.map(r => `${r.time},${r.lp100},${r.lh},${r.spd}`).join('\n');
+    const blob = new Blob([header + rows], { type: 'text/csv' });
+    const a = Object.assign(document.createElement('a'), {
+      href: URL.createObjectURL(blob),
+      download: `consumption_${new Date().toISOString().slice(0,10)}.csv`
+    });
+    a.click();
+  });
+
+  setInterval(update, 200);
+  update();
+}
+</script>
+</body>
+</html>

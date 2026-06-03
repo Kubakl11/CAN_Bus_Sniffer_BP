@@ -1,0 +1,611 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Vehicle Dashboard — OBD-II Cockpit</title>
+<script>
+  (function() {
+    const t = localStorage.getItem('obd_theme');
+    if (t === 'light') document.documentElement.setAttribute('data-theme', 'light');
+  })();
+</script>
+<link rel="stylesheet" href="style.css?v=99">
+<script src="chart.min.js"></script>
+</head>
+
+  <!-- ══ Theme BUTTON ══════════════════════════════════════════════════════ -->
+  <button class="theme-toggle" onclick="toggleTheme()" aria-label="Toggle theme">
+  <svg class="icon-moon" viewBox="0 0 24 24"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/></svg>
+  <svg class="icon-sun" viewBox="0 0 24 24"><circle cx="12" cy="12" r="5"/><line x1="12" y1="1" x2="12" y2="3"/><line x1="12" y1="21" x2="12" y2="23"/><line x1="4.22" y1="4.22" x2="5.64" y2="5.64"/><line x1="18.36" y1="18.36" x2="19.78" y2="19.78"/><line x1="1" y1="12" x2="3" y2="12"/><line x1="21" y1="12" x2="23" y2="12"/><line x1="4.22" y1="19.78" x2="5.64" y2="18.36"/><line x1="18.36" y1="5.64" x2="19.78" y2="4.22"/></svg>
+</button>
+<script>
+  function toggleTheme() {
+    const cur = document.documentElement.getAttribute('data-theme');
+    const next = cur === 'light' ? 'dark' : 'light';
+    if (next === 'light') {
+      document.documentElement.setAttribute('data-theme', 'light');
+      localStorage.setItem('obd_theme', 'light');
+    } else {
+      document.documentElement.removeAttribute('data-theme');
+      localStorage.setItem('obd_theme', 'dark');
+    }
+  }
+</script>
+
+<a href="diagnostic.html" class="diag-fab" aria-label="Diagnostics">
+  <svg viewBox="0 0 24 24"><path d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.76 3.76z"/></svg>
+</a>
+
+
+
+<!-- ══ PAGE: COCKPIT ══════════════════════════════════════════════════════ -->
+<div id="page-cockpit" class="page active">
+  <div class="cockpit-header">
+    <div class="eyebrow">Automotive monitoring</div>
+    <h1 class="cockpit-title">Vehicle <span>Cockpit</span></h1>
+    <div class="cockpit-line"><span class="cockpit-live">Live</span></div>
+  </div>
+  <!-- Gauges -->
+  <div class="gauges-row">
+    <div class="gauge-wrap">
+      <div id="gauge-rpm" style="position:relative;width:100%;max-width:320px;aspect-ratio:1;display:flex;align-items:center;justify-content:center">
+        <div style="position:absolute;inset:0;border-radius:50%;opacity:.15" id="rpmGlow"></div>
+        <!-- SVG layer 1: arc track (rotated) -->
+        <svg style="position:absolute;inset:0;width:100%;height:100%" viewBox="0 0 320 320">
+          <defs>
+            <linearGradient id="rpmGrad" x1="0%" y1="0%" x2="100%" y2="0%">
+              <stop offset="0%" stop-color="hsl(213,85%,47%)"/>
+              <stop offset="100%" stop-color="hsl(213,85%,55%)"/>
+            </linearGradient>
+            <filter id="glowF1"><feGaussianBlur stdDeviation="3" result="b"/><feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge></filter>
+          </defs>
+          <g transform="rotate(-225 160 160)">
+            <!-- Track -->
+            <circle id="rpmTrack" cx="160" cy="160" r="140" fill="none" stroke="hsla(220,15%,22%,.6)" stroke-width="18" stroke-dasharray="659 220"/>
+            <!-- Red zone -->
+            <circle id="rpmRed" cx="160" cy="160" r="140" fill="none" stroke="hsla(0,75%,40%,.45)" stroke-width="18" stroke-dasharray="82 797" stroke-dashoffset="-577"/>
+            <!-- Fill -->
+            <circle id="rpmFill" cx="160" cy="160" r="140" fill="none" stroke="url(#rpmGrad)" stroke-width="18" stroke-linecap="round" stroke-dasharray="0 879" filter="url(#glowF1)" style="transition:stroke-dasharray .1s ease-out"/>
+          </g>
+        </svg>
+        <!-- SVG layer 2: tick labels — exact match from original design -->
+        <svg style="position:absolute;inset:0;width:100%;height:100%" viewBox="0 0 320 320">
+          <g transform="translate(160,160)">
+            <text transform="rotate(-135) translate(0,-105)" text-anchor="middle" dominant-baseline="central" fill="hsl(215,15%,50%)" font-size="13" font-weight="600" font-family="Inter,sans-serif">0</text>
+            <text transform="rotate(-101.25) translate(0,-105)" text-anchor="middle" dominant-baseline="central" fill="hsl(215,15%,50%)" font-size="13" font-weight="600" font-family="Inter,sans-serif">1</text>
+            <text transform="rotate(-67.5) translate(0,-105)" text-anchor="middle" dominant-baseline="central" fill="hsl(215,15%,50%)" font-size="13" font-weight="600" font-family="Inter,sans-serif">2</text>
+            <text transform="rotate(-33.75) translate(0,-105)" text-anchor="middle" dominant-baseline="central" fill="hsl(215,15%,50%)" font-size="13" font-weight="600" font-family="Inter,sans-serif">3</text>
+            <text transform="rotate(0) translate(0,-105)" text-anchor="middle" dominant-baseline="central" fill="hsl(215,15%,50%)" font-size="13" font-weight="600" font-family="Inter,sans-serif">4</text>
+            <text transform="rotate(33.75) translate(0,-105)" text-anchor="middle" dominant-baseline="central" fill="hsl(215,15%,50%)" font-size="13" font-weight="600" font-family="Inter,sans-serif">5</text>
+            <text transform="rotate(67.5) translate(0,-105)" text-anchor="middle" dominant-baseline="central" fill="hsl(215,15%,50%)" font-size="13" font-weight="600" font-family="Inter,sans-serif">6</text>
+            <text transform="rotate(101.25) translate(0,-105)" text-anchor="middle" dominant-baseline="central" fill="hsl(0,75%,55%)" font-size="13" font-weight="700" font-family="Inter,sans-serif">7</text>
+            <text transform="rotate(135) translate(0,-105)" text-anchor="middle" dominant-baseline="central" fill="hsl(0,75%,55%)" font-size="13" font-weight="700" font-family="Inter,sans-serif">8</text>
+          </g>
+        </svg>
+        <!-- SVG layer 3: needle -->
+        <svg style="position:absolute;inset:0;width:100%;height:100%" viewBox="0 0 320 320">
+          <defs>
+            <linearGradient id="needleG1" x1="0%" y1="0%" x2="100%" y2="0%">
+              <stop offset="0%" stop-color="hsl(25,100%,45%)"/>
+              <stop offset="100%" stop-color="hsl(15,100%,55%)"/>
+            </linearGradient>
+            <filter id="nGlow1"><feGaussianBlur stdDeviation="4" result="b"/><feMerge><feMergeNode in="b"/><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge></filter>
+          </defs>
+          <g id="rpmNeedle">
+            <polygon id="rpmNeedleShadow" fill="hsla(0,0%,0%,.35)"/>
+            <polygon id="rpmNeedleBody" fill="url(#needleG1)" filter="url(#nGlow1)"/>
+            <circle cx="160" cy="160" r="10" fill="hsl(220,15%,25%)" stroke="hsl(25,100%,50%)" stroke-width="2"/>
+            <circle cx="160" cy="160" r="4" fill="hsl(25,100%,55%)"/>
+          </g>
+        </svg>
+        <!-- Center display -->
+        <div style="position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:flex-end;padding-bottom:18%;pointer-events:none">
+          <div id="rpmVal" class="font-mono bmw-glow" style="font-size:clamp(22px,6vw,40px);font-weight:700;color:hsl(213,85%,55%)">0.0</div>
+          <div style="font-size:9px;letter-spacing:.2em;text-transform:uppercase;color:var(--muted-foreground);margin-top:3px">rpm</div>
+        </div>
+      </div>
+    </div>
+
+    <div class="gauge-wrap">
+      <div id="gauge-spd" style="position:relative;width:100%;max-width:320px;aspect-ratio:1;display:flex;align-items:center;justify-content:center">
+        <svg style="position:absolute;inset:0;width:100%;height:100%" viewBox="0 0 320 320">
+          <defs>
+            <linearGradient id="spdGrad" x1="0%" y1="0%" x2="100%" y2="0%">
+              <stop offset="0%" stop-color="hsl(213,85%,47%)"/>
+              <stop offset="100%" stop-color="hsl(213,85%,60%)"/>
+            </linearGradient>
+            <filter id="glowF2"><feGaussianBlur stdDeviation="3" result="b"/><feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge></filter>
+          </defs>
+          <g transform="rotate(-225 160 160)">
+            <circle cx="160" cy="160" r="140" fill="none" stroke="hsla(220,15%,22%,.6)" stroke-width="18" stroke-dasharray="659 220"/>
+            <circle id="spdFill" cx="160" cy="160" r="140" fill="none" stroke="url(#spdGrad)" stroke-width="18" stroke-linecap="round" stroke-dasharray="0 879" filter="url(#glowF2)" style="transition:stroke-dasharray .1s ease-out"/>
+          </g>
+        </svg>
+        <!-- SVG layer 2: tick labels with counter-rotation so numbers stay upright -->
+        <svg style="position:absolute;inset:0;width:100%;height:100%" viewBox="0 0 320 320">
+          <g transform="translate(160,160)">
+            <text transform="rotate(-135) translate(0,-105) rotate(135)" text-anchor="middle" dominant-baseline="central" fill="hsl(215,15%,50%)" font-size="11" font-weight="600" font-family="Inter,sans-serif">0</text>
+            <text transform="rotate(-115.71) translate(0,-105) rotate(115.71)" text-anchor="middle" dominant-baseline="central" fill="hsl(215,15%,50%)" font-size="11" font-weight="600" font-family="Inter,sans-serif">20</text>
+            <text transform="rotate(-96.43) translate(0,-105) rotate(96.43)" text-anchor="middle" dominant-baseline="central" fill="hsl(215,15%,50%)" font-size="11" font-weight="600" font-family="Inter,sans-serif">40</text>
+            <text transform="rotate(-77.14) translate(0,-105) rotate(77.14)" text-anchor="middle" dominant-baseline="central" fill="hsl(215,15%,50%)" font-size="11" font-weight="600" font-family="Inter,sans-serif">60</text>
+            <text transform="rotate(-57.86) translate(0,-105) rotate(57.86)" text-anchor="middle" dominant-baseline="central" fill="hsl(215,15%,50%)" font-size="11" font-weight="600" font-family="Inter,sans-serif">80</text>
+            <text transform="rotate(-38.57) translate(0,-105) rotate(38.57)" text-anchor="middle" dominant-baseline="central" fill="hsl(215,15%,50%)" font-size="11" font-weight="600" font-family="Inter,sans-serif">100</text>
+            <text transform="rotate(-19.29) translate(0,-105) rotate(19.29)" text-anchor="middle" dominant-baseline="central" fill="hsl(215,15%,50%)" font-size="11" font-weight="600" font-family="Inter,sans-serif">120</text>
+            <text transform="rotate(0) translate(0,-105)" text-anchor="middle" dominant-baseline="central" fill="hsl(215,15%,50%)" font-size="11" font-weight="600" font-family="Inter,sans-serif">140</text>
+            <text transform="rotate(19.29) translate(0,-105) rotate(-19.29)" text-anchor="middle" dominant-baseline="central" fill="hsl(215,15%,50%)" font-size="11" font-weight="600" font-family="Inter,sans-serif">160</text>
+            <text transform="rotate(38.57) translate(0,-105) rotate(-38.57)" text-anchor="middle" dominant-baseline="central" fill="hsl(215,15%,50%)" font-size="11" font-weight="600" font-family="Inter,sans-serif">180</text>
+            <text transform="rotate(57.86) translate(0,-105) rotate(-57.86)" text-anchor="middle" dominant-baseline="central" fill="hsl(215,15%,50%)" font-size="11" font-weight="600" font-family="Inter,sans-serif">200</text>
+            <text transform="rotate(77.14) translate(0,-105) rotate(-77.14)" text-anchor="middle" dominant-baseline="central" fill="hsl(215,15%,50%)" font-size="11" font-weight="600" font-family="Inter,sans-serif">220</text>
+            <text transform="rotate(96.43) translate(0,-105) rotate(-96.43)" text-anchor="middle" dominant-baseline="central" fill="hsl(215,15%,50%)" font-size="11" font-weight="600" font-family="Inter,sans-serif">240</text>
+            <text transform="rotate(115.71) translate(0,-105) rotate(-115.71)" text-anchor="middle" dominant-baseline="central" fill="hsl(215,15%,50%)" font-size="11" font-weight="600" font-family="Inter,sans-serif">260</text>
+            <text transform="rotate(135) translate(0,-105) rotate(-135)" text-anchor="middle" dominant-baseline="central" fill="hsl(215,15%,50%)" font-size="11" font-weight="600" font-family="Inter,sans-serif">280</text>
+          </g>
+        </svg>
+        <svg style="position:absolute;inset:0;width:100%;height:100%" viewBox="0 0 320 320">
+          <defs>
+            <linearGradient id="needleG2" x1="0%" y1="0%" x2="100%" y2="0%">
+              <stop offset="0%" stop-color="hsl(25,100%,45%)"/>
+              <stop offset="100%" stop-color="hsl(15,100%,55%)"/>
+            </linearGradient>
+            <filter id="nGlow2"><feGaussianBlur stdDeviation="4" result="b"/><feMerge><feMergeNode in="b"/><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge></filter>
+          </defs>
+          <g id="spdNeedle">
+            <polygon id="spdNeedleShadow" fill="hsla(0,0%,0%,.35)"/>
+            <polygon id="spdNeedleBody" fill="url(#needleG2)" filter="url(#nGlow2)"/>
+            <circle cx="160" cy="160" r="10" fill="hsl(220,15%,25%)" stroke="hsl(25,100%,50%)" stroke-width="2"/>
+            <circle cx="160" cy="160" r="4" fill="hsl(25,100%,55%)"/>
+          </g>
+        </svg>
+        <div style="position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:flex-end;padding-bottom:18%;pointer-events:none">
+          <div id="spdVal" class="font-mono bmw-glow" style="font-size:clamp(18px,5vw,40px);font-weight:700;color:hsl(213,85%,55%)">0</div>
+          <div style="font-size:9px;letter-spacing:.2em;text-transform:uppercase;color:var(--muted-foreground);margin-top:3px">km/h</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+
+
+  <!-- Widgets -->
+  <div class="widget-grid">
+    <!-- Vehicle data -->
+<div class="widget glass-card-hover" onclick="window.location.href='vehicle-data.html'">
+      <div class="widget-hdr"><span class="widget-title">Vehicle Overview</span><span class="widget-dot animate-pulse-glow"></span></div>
+      <div id="w-vehicle"></div>
+      <div class="widget-footer">View detail →</div>
+    </div>
+    <!-- Live graphs -->
+<div class="widget glass-card-hover" onclick="window.location.href='graphs.html'">
+  <div class="widget-hdr">
+    <span class="widget-title">Live Graphs</span>
+    <svg style="width:13px;height:13px;stroke:var(--bmw-blue);fill:none;stroke-width:2;stroke-linecap:round;stroke-linejoin:round"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg>
+  </div>
+  <div style="display:flex;flex-direction:column;gap:8px">
+    <div>
+      <div style="display:flex;justify-content:space-between;font-size:9px;text-transform:uppercase;letter-spacing:.1em;margin-bottom:3px">
+        <span style="color:var(--muted-foreground)">RPM</span>
+        <span class="font-mono" id="sw-rpm" style="color:#1C69D4;font-size:11px">0</span>
+      </div>
+      <div style="height:25px"><canvas id="spk-rpm"></canvas></div>
+    </div>
+    <div>
+      <div style="display:flex;justify-content:space-between;font-size:9px;text-transform:uppercase;letter-spacing:.1em;margin-bottom:3px">
+        <span style="color:var(--muted-foreground)">Speed</span>
+        <span class="font-mono" id="sw-spd" style="color:#00C49F;font-size:11px">0</span>
+      </div>
+      <div style="height:25px"><canvas id="spk-spd"></canvas></div>
+    </div>
+    <div>
+      <div style="display:flex;justify-content:space-between;font-size:9px;text-transform:uppercase;letter-spacing:.1em;margin-bottom:3px">
+        <span style="color:var(--muted-foreground)">Coolant</span>
+        <span class="font-mono" id="sw-tmp" style="color:#FF6B00;font-size:11px">0°</span>
+      </div>
+      <div style="height:25px"><canvas id="spk-tmp"></canvas></div>
+    </div>
+  </div>
+  <div class="widget-footer">Open graphs →</div>
+</div>
+    <!-- Alarms -->
+    <div class="widget glass-card-hover" onclick="window.location.href='alarms.html'">
+      <div class="widget-hdr"><span class="widget-title">Alarms</span><span id="w-alarm-ind" class="widget-dot green"></span></div>
+      <div id="w-alarms"></div>
+      <div class="widget-footer">View alarms →</div>
+    </div>
+    <!-- Consumption -->
+    <div class="widget glass-card-hover" onclick="window.location.href='consumption.html'">
+      <div class="widget-hdr"><span class="widget-title">Consumption</span><span class="widget-icon">⛽</span>
+      </div>
+      <div class="cons-big">
+        <div class="cons-sub">Instant</div>
+        <div class="cons-num" id="w-cons-num">—</div>
+        <div class="cons-sub">L / 100 km</div>
+      </div>
+      <div class="mini-grid-2" style="margin-top:8px">
+        <div class="mini-cell">
+          <div class="mc-lbl">Avg since start</div>
+          <div class="mc-val font-mono" id="w-cons-avg">—</div>
+          <div class="mc-lbl">L/100km</div>
+        </div>
+        <div class="mini-cell">
+          <div class="mc-lbl">Flow rate</div>
+          <div class="mc-val font-mono" id="w-cons-lh">0.0</div>
+          <div class="mc-lbl">L/h</div>
+        </div>
+      </div>
+      <div class="widget-footer">View detail →</div>
+    </div>
+  </div>
+</div>
+<!-- ══ BOTTOM NAV ════════════════════════════════════════════════════════ -->
+<nav class="bottom-nav">
+  <div class="nav-inner">
+    <button class="nav-item active" id="nb-cockpit" onclick="nav('cockpit')">
+      <svg viewBox="0 0 24 24"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/></svg>
+      <span class="nav-label">Cockpit</span>
+    </button>
+    <button class="nav-item" id="nb-vehicle-data" onclick="window.location.href='vehicle-data.html'">
+      <svg viewBox="0 0 24 24"><ellipse cx="12" cy="5" rx="9" ry="3"/><path d="M21 12c0 1.66-4 3-9 3s-9-1.34-9-3"/><path d="M3 5v14c0 1.66 4 3 9 3s9-1.34 9-3V5"/></svg>
+      <span class="nav-label">Data</span>
+    </button>
+    <button class="nav-item" id="nb-graphs" onclick="window.location.href='graphs.html'">
+      <svg viewBox="0 0 24 24"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg>
+      <span class="nav-label">Graphs</span>
+    </button>
+    <button class="nav-item" id="nb-alarms" onclick="window.location.href='alarms.html'">
+      <svg viewBox="0 0 24 24"><path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 0 1-3.46 0"/></svg>
+      <span class="nav-label">Alarms</span>
+    </button>
+    <button class="nav-item" id="nb-consumption" onclick="window.location.href='consumption.html'">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <path d="M14 3H5a1 1 0 0 0-1 1v16a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1V9"/>
+        <path d="M14 3v6h4"/>
+        <path d="M18 9l3-3"/>
+        <path d="M21 6V3h-3"/>
+        <line x1="7" y1="13" x2="15" y2="13"/>
+        <line x1="7" y1="17" x2="15" y2="17"/>
+      </svg>
+      <span class="nav-label">Consumption</span>
+    </button>
+  </div>
+</nav>
+
+
+<script type="module">
+import { getData } from './data.js';
+
+// ══ NAVIGATION ══════════════════════════════════════════════════════════
+const pages = ['cockpit','vehicle-data','graphs','alarms','consumption'];
+window.nav = function(id){
+  pages.forEach(p=>{
+    document.getElementById('page-'+p)?.classList.toggle('active',p===id);
+    const nb = document.getElementById('nb-'+p);
+    if(nb) nb.classList.toggle('active',p===id);
+  });
+}
+
+// ══ DATA ════════════════════════════════════════════════════════════════
+let D = getData();
+
+// ══ GAUGE MATH ════════════════════════════════════════════════════════════
+const R=140,CX=160,CY=160,CIRC=2*Math.PI*R,ARCLEN=CIRC*270/360;
+
+function setArc(id,val,max){
+  const f=Math.max(0,Math.min(val/max,1));
+  const filled=f*ARCLEN;
+  document.getElementById(id).setAttribute('stroke-dasharray',`${filled} ${CIRC-filled}`);
+}
+
+function setNeedle(bodyId,shadowId,val,max){
+  const f=Math.max(0,Math.min(val/max,1));
+  const angle=-225+f*270;
+  const rad=angle*Math.PI/180;
+  const needleLen=110, baseLen=0, hw=3;
+  const nx=CX+needleLen*Math.cos(rad);
+  const ny=CY+needleLen*Math.sin(rad);
+  const bx=CX-baseLen*Math.cos(rad);
+  const by=CY-baseLen*Math.sin(rad);
+  const pr=rad+Math.PI/2;
+  const pts=`${nx},${ny} ${bx+hw*Math.cos(pr)},${by+hw*Math.sin(pr)} ${bx-hw*Math.cos(pr)},${by-hw*Math.sin(pr)}`;
+  const sPts=`${nx},${ny} ${bx+hw*Math.cos(pr)+2},${by+hw*Math.sin(pr)+2} ${bx-hw*Math.cos(pr)+2},${by-hw*Math.sin(pr)+2}`;
+  document.getElementById(bodyId).setAttribute('points',pts);
+  document.getElementById(shadowId).setAttribute('points',sPts);
+}
+
+// ── Mini Chart.js grafy pro widget ───────────────────────────────
+const MINI_POINTS = 20;
+
+function makeMiniChart(canvasId, color) {
+  const ctx = document.getElementById(canvasId).getContext('2d');
+  return new Chart(ctx, {
+    type: 'line',
+    data: {
+      labels: Array(MINI_POINTS).fill(''),
+      datasets: [{
+        data: Array(MINI_POINTS).fill(null),
+        borderColor: color,
+        borderWidth: 1.5,
+        tension: 0.3,
+        pointRadius: 0,
+        fill: true,
+        backgroundColor: color + '18',
+      }]
+    },
+    options: {
+      animation: false,
+      responsive: true,
+      maintainAspectRatio: false,
+      scales: {
+        x: { display: false },
+        y: {
+          display: true,
+          ticks: {
+            maxTicksLimit: 3,
+            font: { size: 8 },
+            color: 'hsl(215,15%,40%)',
+          },
+          grid: { color: 'hsla(220,15%,20%,0.4)' },
+          border: { display: false },
+        }
+      },
+      plugins: { legend: { display: false }, tooltip: { enabled: false } }
+    }
+  });
+}
+
+const miniCharts = {
+  rpm: makeMiniChart('spk-rpm', '#1C69D4'),
+  spd: makeMiniChart('spk-spd', '#00C49F'),
+  tmp: makeMiniChart('spk-tmp', '#FF6B00'),
+};
+
+function pushMini(chart, value) {
+  chart.data.datasets[0].data.push(value);
+  chart.data.datasets[0].data.shift();
+  chart.update('none');
+}
+
+// ══ ALARMS ════════════════════════════════════════════════════════════════
+function getAlarms(d) {
+    const a = [];
+    let config = {};
+    try { config = JSON.parse(localStorage.getItem('obd_alarm_config')) || {}; } catch {}
+
+    const check = (id, key, defaultThreshold, level, msg, fmt, compareFn) => {
+        if (d[key] == null) return;
+        const cfg = config[id] || { enabled: true, threshold: defaultThreshold };
+        if (!cfg.enabled) return;
+        if (compareFn(d[key], cfg.threshold)) {
+            a.push({ level, msg, val: fmt(d[key]) });
+        }
+    };
+
+    check('rpm',      'rpm',          6500,  'critical', 'Engine RPM exceeded',    v => `${Math.round(v)} rpm`, (v,t) => v > t);
+    check('coolant',  'coolantTemp',  100,   'critical', 'Coolant overheating',    v => `${v.toFixed(0)}°C`,    (v,t) => v > t);
+    check('voltage',  'systemVoltage',12.5,  'warning',  'Low system voltage',     v => `${v.toFixed(1)}V`,     (v,t) => v < t);
+    check('load',     'engineLoad',   85,    'warning',  'High engine load',       v => `${v.toFixed(0)}%`,     (v,t) => v > t);
+    check('catalyst', 'catalystTemp', 800,   'critical', 'Catalyst overheating',   v => `${v.toFixed(0)}°C`,    (v,t) => v > t);
+    check('speed',    'speed',        160,   'warning',  'Speed exceeded',         v => `${Math.round(v)} km/h`,(v,t) => v > t);
+
+    return a;
+}
+
+// ══ ALARMS WIDGET (cockpit) ══════════════════════════════════════════════
+let _alarmWidgetBuilt = false;
+let _alarmSlots = [];
+let _alarmShield;
+
+function buildAlarmWidget() {
+  const el = document.getElementById('w-alarms');
+  el.innerHTML = `
+    <div class="alarm-shield" data-role="shield">
+      <svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>
+      <p>All systems OK</p>
+    </div>
+    ${[0,1,2,3].map(i => `
+      <div class="alarm-item" data-slot="${i}" style="display:none">
+        <div class="adot"></div>
+        <span class="amsg"></span>
+        <span class="aval"></span>
+      </div>`).join('')}
+  `;
+  _alarmShield = el.querySelector('[data-role="shield"]');
+  _alarmSlots = [0,1,2,3].map(i => {
+    const slot = el.querySelector(`[data-slot="${i}"]`);
+    return { root: slot, msg: slot.querySelector('.amsg'), val: slot.querySelector('.aval') };
+  });
+  _alarmWidgetBuilt = true;
+}
+
+function renderAlarmsWidget(alarms) {
+  if (!_alarmWidgetBuilt) buildAlarmWidget();
+  const ind = document.getElementById('w-alarm-ind');
+  const visible = alarms.slice(0, 4);
+
+  const newClass = visible.length ? 'widget-dot red' : 'widget-dot green';
+  if (ind.className !== newClass) ind.className = newClass;
+
+  const showShield = visible.length === 0;
+  if (_alarmShield.style.display !== (showShield ? '' : 'none')) {
+    _alarmShield.style.display = showShield ? '' : 'none';
+  }
+
+  for (let i = 0; i < 4; i++) {
+    const slot = _alarmSlots[i];
+    const a = visible[i];
+    if (a) {
+      const cls = 'alarm-item ' + a.level;
+      if (slot.root.className !== cls) slot.root.className = cls;
+      if (slot.root.style.display !== '') slot.root.style.display = '';
+      if (slot.msg.textContent !== a.msg) slot.msg.textContent = a.msg;
+      if (slot.val.textContent !== a.val) slot.val.textContent = a.val;
+    } else {
+      if (slot.root.style.display !== 'none') slot.root.style.display = 'none';
+    }
+  }
+}
+
+// ══ WIDGET: VEHICLE DATA ════════════════════════════════════════════════
+const thermIcon = '<path d="M14 14.76V3.5a2.5 2.5 0 0 0-5 0v11.26a4.5 4.5 0 1 0 5 0z"/>';
+const gaugeIcon = '<path d="M12 2a10 10 0 1 0 10 10"/><path d="M12 6v6l4 2"/>';
+const windIcon  = '<path d="M17.7 7.7a2.5 2.5 0 1 1 1.8 4.3H2"/><path d="M9.6 4.6A2 2 0 1 1 11 8H2"/><path d="M12.6 19.4A2 2 0 1 0 14 16H2"/>';
+const dropIcon  = '<path d="M12 2.69l5.66 5.66a8 8 0 1 1-11.31 0z"/>';
+const zapIcon   = '<polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/>';
+const actIcon   = '<polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/>';
+const batIcon   = '<rect x="2" y="7" width="16" height="10" rx="2" ry="2"/><line x1="22" y1="11" x2="22" y2="13"/>';
+const clockIcon = '<circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/>';
+
+const ALL_PIDS = [
+  // ─── ZÁKLADNÍ ÚDAJE (Core) ──────────────────────────────────────
+  { key:'rpm',             label:'RPM',             pid:'0x0C', unit:'rpm',    icon:actIcon,   warn:v=>v>6500 },
+  { key:'speed',           label:'Speed',           pid:'0x0D', unit:'km/h',   icon:gaugeIcon, warn:null },
+  { key:'coolantTemp',     label:'Coolant Temp',    pid:'0x05', unit:'°C',     icon:thermIcon, warn:v=>v>105 },
+  { key:'throttle',        label:'Throttle Pos.',   pid:'0x11', unit:'%',      icon:gaugeIcon, warn:null },
+  { key:'engineLoad',      label:'Engine Load',     pid:'0x04', unit:'%',      icon:actIcon,   warn:v=>v>90 },
+  { key:'absoluteLoad',    label:'Absolute Load',   pid:'0x43', unit:'%',      icon:actIcon,   warn:null },
+
+  // ─── TEPLOTY (Temperatures) ─────────────────────────────────────
+  { key:'intakeAirTemp',   label:'Intake Air',      pid:'0x0F', unit:'°C',     icon:thermIcon, warn:null },
+  { key:'outdoorTemp',     label:'Outdoor Temp',    pid:'0x46', unit:'°C',     icon:thermIcon, warn:null },
+  { key:'catalystTemp',    label:'Catalyst Temp',   pid:'0x3C', unit:'°C',     icon:thermIcon, warn:v=>v>800 },
+  { key:'oilTemp',         label:'Engine Oil',      pid:'0x5C', unit:'°C',     icon:thermIcon, warn:v=>v>120 },
+
+  // ─── TLAKY A VZDUCH (Pressures & Air) ───────────────────────────
+  { key:'mapPressure',     label:'MAP Pressure',    pid:'0x0B', unit:'kPa',    icon:gaugeIcon, warn:null },
+  { key:'barometric',      label:'Baro. Pressure',  pid:'0x33', unit:'kPa',    icon:gaugeIcon, warn:null },
+  { key:'maf',             label:'MAF Flow Rate',   pid:'0x10', unit:'g/s',    icon:windIcon,  warn:null },
+
+  // ─── PALIVO A SMĚS (Fuel & Mixture) ─────────────────────────────
+  { key:'fuelConsumption', label:'Fuel Consump.',   pid:'0x5E', unit:'L/h',    icon:dropIcon,  warn:null },
+  { key:'fuelLevel',       label:'Fuel Level',      pid:'0x2F', unit:'%',      icon:dropIcon,  warn:v=>v<10 },
+  { key:'fuelPressure',    label:'Fuel Pressure',   pid:'0x0A', unit:'kPa',    icon:gaugeIcon, warn:null },
+  { key:'fuelRail',        label:'Fuel Rail Pres.', pid:'0x23', unit:'kPa',    icon:gaugeIcon, warn:null },
+  { key:'ethanolPct',      label:'Ethanol %',       pid:'0x52', unit:'%',      icon:dropIcon,  warn:null },
+  { key:'lambda',          label:'Equiv. Ratio (λ)',pid:'0x44', unit:'',       icon:actIcon,   warn:null },
+  { key:'o2Voltage',       label:'O2 Sensor Vol.',  pid:'0x14', unit:'V',      icon:zapIcon,   warn:null },
+  { key:'stft',            label:'Short Term FT',   pid:'0x06', unit:'%',      icon:actIcon,   warn:v=>v>15||v<-15 },
+  { key:'ltft',            label:'Long Term FT',    pid:'0x07', unit:'%',      icon:actIcon,   warn:v=>v>15||v<-15 },
+
+  // ─── ŘÍZENÍ MOTORU (Engine Management) ──────────────────────────
+  { key:'ignitionTiming',  label:'Ignition Timing', pid:'0x0E', unit:'°',      icon:zapIcon,   warn:null },
+  { key:'egrCommanded',    label:'EGR Commanded',   pid:'0x2C', unit:'%',      icon:windIcon,  warn:null },
+  { key:'egrError',        label:'EGR Error',       pid:'0x2D', unit:'%',      icon:windIcon,  warn:null },
+  { key:'evapPurge',       label:'EVAP Purge',      pid:'0x2E', unit:'%',      icon:windIcon,  warn:null },
+
+  // ─── ELEKTRIKA A OSTATNÍ (Electrical & Misc) ────────────────────
+  { key:'systemVoltage',   label:'System Voltage',  pid:'0x42', unit:'V',      icon:batIcon,   warn:v=>v<12 },
+  { key:'engineRuntime',   label:'Engine Runtime',  pid:'0x1F', unit:'min',    icon:clockIcon, warn:null },
+  { key:'milDistance',     label:'MIL Distance',    pid:'0x21', unit:'km',     icon:actIcon,   warn:v=>v>0 },
+  { key:'distCleared',     label:'Dist. Since Clr', pid:'0x31', unit:'km',    icon:actIcon,   warn:null },
+  { key:'hybridBattery',   label:'Hybrid Battery',  pid:'0x5B', unit:'%',      icon:batIcon,   warn:v=>v<20 }
+];
+
+let _vehWidgetBuilt = false;
+let _vehSlots = [];
+let _lastSavedPids = "";
+
+function buildVehicleWidget(d) {
+  let savedPids = ['engineLoad', 'throttle', 'intakeAirTemp', 'coolantTemp', 'systemVoltage'];
+  try {
+    const parsed = JSON.parse(localStorage.getItem('obd_dashboard_pids'));
+    if (Array.isArray(parsed) && parsed.length > 0) savedPids = parsed;
+  } catch(e) {}
+  
+
+  const available = savedPids.map(key => ALL_PIDS.find(p => p.key === key))
+                             .filter(p => p && d[p.key] != null);
+
+  const el = document.getElementById('w-vehicle');
+  el.innerHTML = available.map((p, i) => `
+    <div class="data-row" data-slot="${i}">
+      <div class="dr-icon"><svg viewBox="0 0 24 24">${p.icon}</svg>${p.label}</div>
+      <span class="dr-val font-mono"></span>
+    </div>
+  `).join('');
+  
+  _vehSlots = available.map((p, i) => ({
+    pid: p,
+    valEl: el.querySelector(`[data-slot="${i}"] .dr-val`),
+  }));
+  _vehWidgetBuilt = true;
+}
+
+function renderVehicleWidget(d) {
+  const currentSavedPids = localStorage.getItem('obd_dashboard_pids') || "";
+  if (!_vehWidgetBuilt || _lastSavedPids !== currentSavedPids) {
+    buildVehicleWidget(d);
+    _lastSavedPids = currentSavedPids;
+  }
+  
+  for (const slot of _vehSlots) {
+    const v = d[slot.pid.key];
+    if (v == null) continue;
+    const formatted = (v % 1 === 0 ? v.toFixed(0) : v.toFixed(1)) + ' ' + slot.pid.unit;
+    if (slot.valEl.textContent !== formatted) slot.valEl.textContent = formatted;
+    const isWarn = slot.pid.warn ? slot.pid.warn(v) : false;
+    const cls = 'dr-val font-mono' + (isWarn ? ' danger' : '');
+    if (slot.valEl.className !== cls) slot.valEl.className = cls;
+  }
+}
+
+// ══ Consumption setup ======
+let wStartL = 0, wStartDist = 0, wLastTime = Date.now(), wLastSpd = 0;
+// ══ MAIN UPDATE ══════════════════════════════════════════════════════════
+let frame=0;
+
+function update(){
+  D = getData();
+  const d=D;
+  frame++;
+
+  // Gauges
+  setArc('rpmFill',d.rpm,8000);
+  setArc('spdFill',d.speed,280);
+  setNeedle('rpmNeedleBody','rpmNeedleShadow',d.rpm,8000);
+  setNeedle('spdNeedleBody','spdNeedleShadow',d.speed,280);
+  document.getElementById('rpmVal').textContent = d.rpm != null ? Math.round(d.rpm) : '—';
+  document.getElementById('spdVal').textContent = d.speed != null ? Math.round(d.speed) : '—';
+
+  const rpmColor = d.rpm > 7000 ? 'hsl(0,85%,55%)' : 'hsl(213,85%,50%)';
+  const rpmFill = document.getElementById('rpmFill');
+  if (rpmFill.getAttribute('stroke') !== rpmColor) {
+    rpmFill.setAttribute('stroke', rpmColor);
+    document.getElementById('rpmVal').style.color = rpmColor;
+  }
+
+  // Sparklines
+  pushMini(miniCharts.rpm, d.rpm ?? 0);
+  pushMini(miniCharts.spd, d.speed ?? 0);
+  pushMini(miniCharts.tmp, d.coolantTemp ?? 0);
+  document.getElementById('sw-rpm').textContent = d.rpm != null ? Math.round(d.rpm) : '—';
+  document.getElementById('sw-spd').textContent = d.speed != null ? Math.round(d.speed) : '—';
+  document.getElementById('sw-tmp').textContent = d.coolantTemp != null ? Math.round(d.coolantTemp) + '°' : '—';
+
+  // Consumption
+  const lp100 = d.speed > 5 ? (d.fuelConsumption / d.speed) * 100 : null;
+  const wNow = Date.now();
+  const wDtH = (wNow - wLastTime) / 3600000;
+  wLastTime = wNow;
+  wStartL += (d.fuelConsumption ?? 0) * wDtH;
+  wStartDist += ((d.speed + wLastSpd) / 2) * wDtH;
+  wLastSpd = d.speed ?? 0;
+  const avgLp100 = wStartDist > 0.05 ? (wStartL / wStartDist) * 100 : null;
+
+  document.getElementById('w-cons-num').textContent = lp100 ? lp100.toFixed(1) : '—';
+  document.getElementById('w-cons-avg').textContent = avgLp100 ? avgLp100.toFixed(1) : '—';
+  document.getElementById('w-cons-lh').textContent = d.fuelConsumption != null ? d.fuelConsumption.toFixed(1) : '—';
+
+  // Alarms + vehicle data
+  if (frame % 2 === 0) {
+    const alarms = getAlarms(d);
+    renderAlarmsWidget(alarms);
+    renderVehicleWidget(d);
+  }
+}
+
+// ══ INIT ════════════════════════════════════════════════════════════════
+setInterval(update,200);
+update();
+</script>
+</body>
+</html>

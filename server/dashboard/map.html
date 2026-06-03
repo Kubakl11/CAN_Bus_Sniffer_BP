@@ -1,0 +1,372 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>GPS Map — OBD-II</title>
+<script>
+  // Apply saved theme before render — prevents dark→light flash on page load
+  (function() {
+    const t = localStorage.getItem('obd_theme');
+    if (t === 'light') document.documentElement.setAttribute('data-theme', 'light');
+  })();
+</script>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600;700&family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
+<link rel="stylesheet" href="style.css">
+<style>
+#map {
+  height: calc(100vh - 280px);
+  min-height: 300px;
+  border-radius: var(--radius);
+  border: 1px solid var(--border);
+}
+.map-stats {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 8px;
+  margin-bottom: 12px;
+}
+@media(max-width:480px){ .map-stats { grid-template-columns: repeat(2,1fr); } }
+.map-stat {
+  border-radius: var(--radius);
+  padding: 10px;
+  text-align: center;
+}
+.map-stat .ms-lbl {
+  font-size: 9px;
+  text-transform: uppercase;
+  letter-spacing: .1em;
+  color: var(--muted-foreground);
+  margin-bottom: 3px;
+}
+.map-stat .ms-val {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 18px;
+  font-weight: 700;
+  color: var(--primary);
+}
+.map-actions {
+  display: flex;
+  gap: 8px;
+  margin-bottom: 12px;
+}
+.map-btn {
+  padding: 7px 14px;
+  border-radius: 8px;
+  border: 1px solid var(--border);
+  background: var(--secondary);
+  color: var(--foreground);
+  font-size: 10px;
+  font-weight: 600;
+  cursor: pointer;
+  letter-spacing: .06em;
+  text-transform: uppercase;
+  transition: all .2s;
+}
+.map-btn:hover { border-color: var(--primary); color: var(--primary); }
+.map-btn.danger { border-color: hsla(0,85%,55%,.3); background: hsla(0,85%,55%,.08); color: var(--bmw-red); }
+</style>
+</head>
+<body>
+
+  <!-- ══ Theme BUTTON ══════════════════════════════════════════════════════ -->
+  <button class="theme-toggle" onclick="toggleTheme()" aria-label="Toggle theme">
+  <svg class="icon-moon" viewBox="0 0 24 24"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/></svg>
+  <svg class="icon-sun" viewBox="0 0 24 24"><circle cx="12" cy="12" r="5"/><line x1="12" y1="1" x2="12" y2="3"/><line x1="12" y1="21" x2="12" y2="23"/><line x1="4.22" y1="4.22" x2="5.64" y2="5.64"/><line x1="18.36" y1="18.36" x2="19.78" y2="19.78"/><line x1="1" y1="12" x2="3" y2="12"/><line x1="21" y1="12" x2="23" y2="12"/><line x1="4.22" y1="19.78" x2="5.64" y2="18.36"/><line x1="18.36" y1="5.64" x2="19.78" y2="4.22"/></svg>
+</button>
+<script>
+  function toggleTheme() {
+    const cur = document.documentElement.getAttribute('data-theme');
+    const next = cur === 'light' ? 'dark' : 'light';
+    if (next === 'light') {
+      document.documentElement.setAttribute('data-theme', 'light');
+      localStorage.setItem('obd_theme', 'light');
+    } else {
+      document.documentElement.removeAttribute('data-theme');
+      localStorage.setItem('obd_theme', 'dark');
+    }
+  }
+</script>
+
+<div class="page active" style="display:block">
+
+  <div class="page-header">
+    <a href="dashboard.html" class="back-btn">
+      <svg viewBox="0 0 24 24"><polyline points="15 18 9 12 15 6"/></svg>
+    </a>
+    <div>
+      <div class="page-title">GPS Map</div>
+      <div class="page-subtitle" id="map-coords-hdr">Waiting for GPS…</div>
+    </div>
+  </div>
+
+  <!-- Route statistics -->
+  <div class="map-stats">
+    <div class="map-stat glass-card">
+      <div class="ms-lbl">Distance</div>
+      <div class="ms-val" id="ms-dist">0.0 <span style="font-size:11px;color:var(--muted-foreground)">km</span></div>
+    </div>
+    <div class="map-stat glass-card">
+      <div class="ms-lbl">Max Speed</div>
+      <div class="ms-val" id="ms-maxspd">0 <span style="font-size:11px;color:var(--muted-foreground)">km/h</span></div>
+    </div>
+    <div class="map-stat glass-card">
+      <div class="ms-lbl">Average</div>
+      <div class="ms-val" id="ms-avgspd">0 <span style="font-size:11px;color:var(--muted-foreground)">km/h</span></div>
+    </div>
+    <div class="map-stat glass-card">
+      <div class="ms-lbl">Route Points</div>
+      <div class="ms-val" id="ms-points">0</div>
+    </div>
+  </div>
+
+  <!-- Actions -->
+  <div class="map-actions">
+    <button class="map-btn" id="btn-center">📍 Center</button>
+    <button class="map-btn" id="btn-export-gpx">📥 Export GPX</button>
+    <button class="map-btn danger" id="btn-clear-route">🗑 Clear Route</button>
+    <!-- Style switcher -->
+  <select id="map-style-select" style="padding:7px 10px;border-radius:8px;border:1px solid var(--border);background:var(--secondary);color:var(--foreground);font-size:10px;font-weight:600;cursor:pointer;letter-spacing:.05em;outline:none">
+    <option value="navigation-night-v1">Navigation</option>
+    <option value="dark-v11">Dark</option>
+    <option value="streets-v12">Streets</option>
+    <option value="satellite-streets-v12">Satellite</option>
+    <option value="outdoors-v12">Outdoors</option>
+    <option value="light-v11">Light</option>
+    <option value="navigation-day-v1">Navigation Day</option>
+  </select>
+  </div>
+
+  <!-- Map -->
+  <div class="glass-card" style="border-radius:var(--radius);padding:8px;margin-bottom:20px">
+    <div id="map"></div>
+  </div>
+
+</div>
+<!-- Bottom nav -->
+<nav class="bottom-nav">
+  <div class="nav-inner">
+    <button class="nav-item" id="nb-cockpit" onclick="window.location.href='dashboard.html'">
+      <svg viewBox="0 0 24 24"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/></svg>
+      <span class="nav-label">Cockpit</span>
+    </button>
+    <button class="nav-item" id="nb-vehicle-data" onclick="window.location.href='vehicle-data.html'">
+      <svg viewBox="0 0 24 24"><ellipse cx="12" cy="5" rx="9" ry="3"/><path d="M21 12c0 1.66-4 3-9 3s-9-1.34-9-3"/><path d="M3 5v14c0 1.66 4 3 9 3s9-1.34 9-3V5"/></svg>
+      <span class="nav-label">Data</span>
+    </button>
+    <button class="nav-item" id="nb-graphs" onclick="window.location.href='graphs.html'">
+      <svg viewBox="0 0 24 24"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg>
+      <span class="nav-label">Graphs</span>
+    </button>
+    <button class="nav-item" id="nb-alarms" onclick="window.location.href='alarms.html'">
+      <svg viewBox="0 0 24 24"><path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 0 1-3.46 0"/></svg>
+      <span class="nav-label">Alarms</span>
+    </button>
+    <button class="nav-item" id="nb-consumption" onclick="window.location.href='consumption.html'">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <path d="M14 3H5a1 1 0 0 0-1 1v16a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1V9"/>
+        <path d="M14 3v6h4"/>
+        <path d="M18 9l3-3"/>
+        <path d="M21 6V3h-3"/>
+        <line x1="7" y1="13" x2="15" y2="13"/>
+        <line x1="7" y1="17" x2="15" y2="17"/>
+      </svg>
+      <span class="nav-label">Consumption</span>
+    </button>
+
+    <button class="nav-item active" id="nb-map" onclick="window.location.href='map.html'">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <polygon points="1 6 1 22 8 18 16 22 23 18 23 2 16 6 8 2 1 6"/>
+        <line x1="8" y1="2" x2="8" y2="18"/>
+        <line x1="16" y1="6" x2="16" y2="22"/>
+      </svg>
+      <span class="nav-label">Map</span>
+    </button>
+  </div>
+</nav>
+
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<script type="module">
+import { getData } from './data.js';
+
+// ── Leaflet init ──────────────────────────────────────────────────
+const MAPBOX_TOKEN = 'SECRET_MAP_BOX_TOKEN';
+
+const map = L.map('map', { zoomControl: true, attributionControl: false })
+  .setView([50.0755, 14.4378], 15);
+
+let currentTileLayer = null;
+
+function setMapStyle(style) {
+  if (currentTileLayer) map.removeLayer(currentTileLayer);
+  currentTileLayer = L.tileLayer(
+    `https://api.mapbox.com/styles/v1/mapbox/${style}/tiles/{z}/{x}/{y}?access_token=${MAPBOX_TOKEN}`,
+    { maxZoom: 22, tileSize: 512, zoomOffset: -1 }
+  ).addTo(map);
+}
+
+// Init with default style
+setMapStyle('streets-v12');
+
+document.getElementById('map-style-select').addEventListener('change', e => {
+  setMapStyle(e.target.value);
+});
+
+// ── Marker ────────────────────────────────────────────────────────
+const markerIcon = L.divIcon({
+  html: `<div style="width:14px;height:14px;border-radius:50%;background:hsl(213,85%,47%);border:2px solid white;box-shadow:0 0 12px hsl(213,85%,47%)"></div>`,
+  iconSize: [14, 14], iconAnchor: [7, 7], className: ''
+});
+const startIcon = L.divIcon({
+  html: `<div style="width:12px;height:12px;border-radius:50%;background:hsl(142,70%,45%);border:2px solid white;box-shadow:0 0 8px hsl(142,70%,45%)"></div>`,
+  iconSize: [12, 12], iconAnchor: [6, 6], className: ''
+});
+
+let marker = L.marker([50.0755, 14.4378], { icon: markerIcon }).addTo(map);
+let startMarker = null;
+
+// ── Route ─────────────────────────────────────────────────────────
+const routePoints = [];
+let routeLine = null;
+let autoCenter = true;
+let maxSpeed = 0;
+let speedSum = 0, speedN = 0;
+let totalDist = 0;
+let lastPos = null;
+
+function haversine(a, b) {
+  const R = 6371;
+  const dLat = (b[0] - a[0]) * Math.PI / 180;
+  const dLon = (b[1] - a[1]) * Math.PI / 180;
+  const x = Math.sin(dLat/2)**2 + Math.cos(a[0]*Math.PI/180) * Math.cos(b[0]*Math.PI/180) * Math.sin(dLon/2)**2;
+  return R * 2 * Math.atan2(Math.sqrt(x), Math.sqrt(1-x));
+}
+
+function addPoint(lat, lon, speed) {
+  const pt = [lat, lon];
+  routePoints.push(pt);
+
+  // First point = start marker
+  if (routePoints.length === 1) {
+    startMarker = L.marker(pt, { icon: startIcon }).addTo(map).bindTooltip('Start');
+  }
+
+  // Distance
+  if (lastPos) totalDist += haversine(lastPos, pt);
+  lastPos = pt;
+
+  // Speed stats
+  if (speed > maxSpeed) maxSpeed = speed;
+  speedSum += speed; speedN++;
+
+  // Redraw route
+  if (routeLine) map.removeLayer(routeLine);
+  routeLine = L.polyline(routePoints, {
+    color: 'hsl(213,85%,55%)',
+    weight: 3,
+    opacity: 0.85,
+  }).addTo(map);
+
+  // Update marker
+  marker.setLatLng(pt);
+  if (autoCenter) map.panTo(pt);
+}
+
+const firstData = getData();
+const hasGPS = firstData.lat != null && firstData.lon != null;
+
+if (!hasGPS) {
+  document.getElementById('map-coords-hdr').textContent = 'GPS not available';
+  document.getElementById('map').innerHTML = `
+    <div style="height:100%;display:flex;align-items:center;justify-content:center;flex-direction:column;gap:8px">
+      <div style="font-size:32px">🛰</div>
+      <div style="font-size:14px;font-weight:600;color:var(--muted-foreground)">GPS signal not available</div>
+      <div style="font-size:11px;color:var(--muted-foreground)">Vehicle does not support GPS or signal is not available</div>
+    </div>`;
+}
+
+if (hasGPS) {
+  setInterval(update, 200);
+  update();
+}
+
+// ── Update loop ──────────────────────────────────────────────────
+let frame = 0;
+
+function update() {
+  const d = getData();
+  frame++;
+
+  if (d.lat == null || d.lon == null) return;
+
+  // Add route point every 10 frames (~2s)
+  if (frame % 10 === 0) {
+    addPoint(d.lat, d.lon, d.speed ?? 0);
+  }
+
+  // Update marker position smoothly
+  marker.setLatLng([d.lat, d.lon]);
+  if (autoCenter) map.panTo([d.lat, d.lon]);
+
+  // Coordinates in header
+  document.getElementById('map-coords-hdr').textContent =
+    `${d.lat.toFixed(5)}° N, ${d.lon.toFixed(5)}° E`;
+
+  // Statistics
+  document.getElementById('ms-dist').innerHTML    = `${totalDist.toFixed(2)} <span style="font-size:11px;color:var(--muted-foreground)">km</span>`;
+  document.getElementById('ms-maxspd').innerHTML  = `${Math.round(maxSpeed)} <span style="font-size:11px;color:var(--muted-foreground)">km/h</span>`;
+  document.getElementById('ms-avgspd').innerHTML  = speedN > 0 ? `${Math.round(speedSum/speedN)} <span style="font-size:11px;color:var(--muted-foreground)">km/h</span>` : `0 <span style="font-size:11px;color:var(--muted-foreground)">km/h</span>`;
+  document.getElementById('ms-points').textContent = routePoints.length;
+}
+
+// ── Buttons ──────────────────────────────────────────────────────
+document.getElementById('btn-center').addEventListener('click', () => {
+  autoCenter = true;
+  if (routePoints.length > 1) {
+    map.fitBounds(L.polyline(routePoints).getBounds(), { padding: [20, 20] });
+  } else if (lastPos) {
+    map.setView(lastPos, 15);
+  }
+});
+
+// Disable autoCenter upon manual map interaction
+map.on('dragstart', () => { autoCenter = false; });
+
+document.getElementById('btn-clear-route').addEventListener('click', () => {
+  if (!confirm('Clear recorded route?')) return;
+  routePoints.length = 0;
+  totalDist = 0; maxSpeed = 0; speedSum = 0; speedN = 0; lastPos = null;
+  if (routeLine) { map.removeLayer(routeLine); routeLine = null; }
+  if (startMarker) { map.removeLayer(startMarker); startMarker = null; }
+});
+
+// ── GPX Export ────────────────────────────────────────────────────
+document.getElementById('btn-export-gpx').addEventListener('click', () => {
+  if (routePoints.length < 2) return;
+  const now = new Date().toISOString();
+  const trkpts = routePoints.map(([lat, lon]) =>
+    `    <trkpt lat="${lat.toFixed(6)}" lon="${lon.toFixed(6)}"></trkpt>`
+  ).join('\n');
+  const gpx = `<?xml version="1.0" encoding="UTF-8"?>
+<gpx version="1.1" creator="OBD-II Dashboard">
+  <trk>
+    <name>OBD Trip ${now.slice(0,10)}</name>
+    <trkseg>
+${trkpts}
+    </trkseg>
+  </trk>
+</gpx>`;
+  const a = Object.assign(document.createElement('a'), {
+    href: URL.createObjectURL(new Blob([gpx], { type: 'application/gpx+xml' })),
+    download: `route_${now.slice(0,10)}.gpx`
+  });
+  a.click();
+});
+
+setInterval(update, 200);
+update();
+</script>
+</body>
+</html>

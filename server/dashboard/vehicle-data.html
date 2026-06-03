@@ -1,0 +1,412 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Vehicle Overview — OBD-II</title>
+<script>
+  // Apply saved theme before render — prevents dark→light flash on page load
+  (function() {
+    const t = localStorage.getItem('obd_theme');
+    if (t === 'light') document.documentElement.setAttribute('data-theme', 'light');
+  })();
+</script>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600;700&family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+<!-- ══ Theme BUTTON ══════════════════════════════════════════════════════ -->
+  <button class="theme-toggle" onclick="toggleTheme()" aria-label="Toggle theme">
+  <svg class="icon-moon" viewBox="0 0 24 24"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/></svg>
+  <svg class="icon-sun" viewBox="0 0 24 24"><circle cx="12" cy="12" r="5"/><line x1="12" y1="1" x2="12" y2="3"/><line x1="12" y1="21" x2="12" y2="23"/><line x1="4.22" y1="4.22" x2="5.64" y2="5.64"/><line x1="18.36" y1="18.36" x2="19.78" y2="19.78"/><line x1="1" y1="12" x2="3" y2="12"/><line x1="21" y1="12" x2="23" y2="12"/><line x1="4.22" y1="19.78" x2="5.64" y2="18.36"/><line x1="18.36" y1="5.64" x2="19.78" y2="4.22"/></svg>
+</button>
+<script>
+  function toggleTheme() {
+    const cur = document.documentElement.getAttribute('data-theme');
+    const next = cur === 'light' ? 'dark' : 'light';
+    if (next === 'light') {
+      document.documentElement.setAttribute('data-theme', 'light');
+      localStorage.setItem('obd_theme', 'light');
+    } else {
+      document.documentElement.removeAttribute('data-theme');
+      localStorage.setItem('obd_theme', 'dark');
+    }
+  }
+</script>
+
+<div class="page active" style="display:block">
+
+  <div class="page-header">
+    <a href="dashboard.html" class="back-btn">
+      <svg viewBox="0 0 24 24"><polyline points="15 18 9 12 15 6"/></svg>
+    </a>
+    <div>
+      <div class="page-title">Vehicle Overview</div>
+      <div class="page-subtitle">OBD-II PID Data</div>
+    </div>
+  </div>
+
+  <!-- Widget Settings -->
+  <div style="margin-bottom:20px;position:relative" id="pid-dropdown-wrap">
+  <button id="pid-dropdown-btn" class="glass-card" style="width:100%;border-radius:var(--radius);padding:12px 16px;display:flex;justify-content:space-between;align-items:center;cursor:pointer;border:1px solid var(--border)">
+    <div>
+    <div class="section-title" style="margin-bottom:0">Show on main page</div>
+    <div style="font-size:14px;color:var(--muted-foreground);margin-top:3px" id="pid-selected-summary">5 values selected</div>
+    </div>
+    <span id="pid-arrow" style="color:var(--muted-foreground);font-size:12px;transition:transform .2s">▼</span>
+    </button>
+    <div id="pid-dropdown" class="glass-card" style="display:none;position:absolute;top:calc(100% + 6px);left:0;right:0;border-radius:var(--radius);padding:12px;z-index:50;border:1px solid var(--border)">
+    <div class="pid-selector" id="pid-selector"></div>
+  </div>
+  </div>
+
+<div id="no-data-banner" style="display:none;padding:32px 20px;text-align:center">
+  <svg style="width:40px;height:40px;stroke:hsl(215,15%,35%);fill:none;stroke-width:1.5;margin:0 auto 12px;display:block" viewBox="0 0 24 24">
+    <circle cx="12" cy="12" r="10"/><line x1="4.93" y1="4.93" x2="19.07" y2="19.07"/>
+  </svg>
+  <div style="color:hsl(215,15%,50%);font-size:14px;font-weight:600;font-family:Inter,sans-serif">No data available</div>
+  <div style="color:hsl(215,15%,35%);font-size:12px;margin-top:4px;font-family:Inter,sans-serif">Sniffer not connected</div>
+</div>
+
+<div id="pid-sections">
+  <div class="section-title">Core Operating Data</div>
+  <div class="data-card-grid" id="vd-basic"></div>
+
+  <div class="section-title">Temperatures & Pressures</div>
+  <div class="data-card-grid" id="vd-temps"></div>
+
+  <div class="section-title">Fuel & Mixture</div>
+  <div class="data-card-grid" id="vd-fuel"></div>
+
+  <div class="section-title">Engine Management</div>
+  <div class="data-card-grid" id="vd-engine"></div>
+
+  <div class="section-title">Electrical System</div>
+  <div class="data-card-grid" id="vd-elec"></div>
+</div>
+
+  <!-- History -->
+  <div class="section-title" style="margin-top:4px">Data History</div>
+
+  <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin-bottom:12px">
+    <div class="glass-card" style="border-radius:var(--radius);padding:10px;text-align:center">
+      <div style="font-size:9px;text-transform:uppercase;letter-spacing:.1em;color:var(--muted-foreground);margin-bottom:3px">Logs</div>
+      <div class="font-mono" style="font-size:18px;font-weight:700;color:var(--primary)" id="hs-count">0</div>
+    </div>
+    <div class="glass-card" style="border-radius:var(--radius);padding:10px;text-align:center">
+      <div style="font-size:9px;text-transform:uppercase;letter-spacing:.1em;color:var(--muted-foreground);margin-bottom:3px">Max Speed</div>
+      <div class="font-mono" style="font-size:18px;font-weight:700;color:var(--primary)" id="hs-maxspeed">—</div>
+    </div>
+    <div class="glass-card" style="border-radius:var(--radius);padding:10px;text-align:center">
+      <div style="font-size:9px;text-transform:uppercase;letter-spacing:.1em;color:var(--muted-foreground);margin-bottom:3px">Avg RPM</div>
+      <div class="font-mono" style="font-size:18px;font-weight:700;color:var(--primary)" id="hs-avgrpm">—</div>
+    </div>
+    <div class="glass-card" style="border-radius:var(--radius);padding:10px;text-align:center">
+      <div style="font-size:9px;text-transform:uppercase;letter-spacing:.1em;color:var(--muted-foreground);margin-bottom:3px">Max Temp</div>
+      <div class="font-mono" style="font-size:18px;font-weight:700;color:var(--primary)" id="hs-maxtemp">—</div>
+    </div>
+  </div>
+
+  <div style="display:flex;gap:8px;margin-bottom:10px">
+    <button id="btn-export" class="glass-card" style="padding:7px 14px;border-radius:8px;color:var(--foreground);font-size:10px;font-weight:600;cursor:pointer;letter-spacing:.06em;text-transform:uppercase">
+      📥 Export CSV
+    </button>
+    <button id="btn-clear" style="padding:7px 14px;border-radius:8px;border:1px solid hsla(0,85%,55%,.25);background:hsla(0,85%,55%,.08);color:var(--bmw-red);font-size:10px;font-weight:600;cursor:pointer;letter-spacing:.06em;text-transform:uppercase">
+      🗑 Clear
+    </button>
+  </div>
+
+  <div class="history-wrap glass-card">
+    <div class="history-scroll">
+      <table class="history-table">
+        <thead>
+          <tr>
+            <th>#</th><th>Time</th><th>RPM</th><th>km/h</th>
+            <th>Cool. °C</th><th>Voltage V</th><th>L/h</th><th>Load %</th>
+          </tr>
+        </thead>
+        <tbody id="history-tbody">
+          <tr><td colspan="8" class="history-empty">System waiting for data</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+</div>
+
+<nav class="bottom-nav">
+  <div class="nav-inner">
+    <a class="nav-item" href="dashboard.html">
+      <svg viewBox="0 0 24 24"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/></svg>
+      <span class="nav-label">Cockpit</span>
+    </a>
+    <a class="nav-item active" href="vehicle-data.html">
+      <svg viewBox="0 0 24 24"><ellipse cx="12" cy="5" rx="9" ry="3"/><path d="M21 12c0 1.66-4 3-9 3s-9-1.34-9-3"/><path d="M3 5v14c0 1.66 4 3 9 3s9-1.34 9-3V5"/></svg>
+      <span class="nav-label">Data</span>
+    </a>
+    <a class="nav-item" href="graphs.html">
+      <svg viewBox="0 0 24 24"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg>
+      <span class="nav-label">Graphs</span>
+    </a>
+    <a class="nav-item" href="alarms.html">
+      <svg viewBox="0 0 24 24"><path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 0 1-3.46 0"/></svg>
+      <span class="nav-label">Alarms</span>
+    </a>
+    <button class="nav-item" id="nb-consumption" onclick="window.location.href='consumption.html'">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <path d="M14 3H5a1 1 0 0 0-1 1v16a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1V9"/>
+        <path d="M14 3v6h4"/>
+        <path d="M18 9l3-3"/>
+        <path d="M21 6V3h-3"/>
+        <line x1="7" y1="13" x2="15" y2="13"/>
+        <line x1="7" y1="17" x2="15" y2="17"/>
+      </svg>
+      <span class="nav-label">Consumption</span>
+    </button>
+
+    <button class="nav-item" id="nb-map" onclick="window.location.href='map.html'">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <polygon points="1 6 1 22 8 18 16 22 23 18 23 2 16 6 8 2 1 6"/>
+        <line x1="8" y1="2" x2="8" y2="18"/>
+        <line x1="16" y1="6" x2="16" y2="22"/>
+      </svg>
+      <span class="nav-label">Map</span>
+    </button>
+  </div>
+</nav>
+
+<script type="module">
+import { getData, isStale } from './data.js';
+
+const thermIcon = '<path d="M14 14.76V3.5a2.5 2.5 0 0 0-5 0v11.26a4.5 4.5 0 1 0 5 0z"/>';
+const gaugeIcon = '<path d="M12 2a10 10 0 1 0 10 10"/><path d="M12 6v6l4 2"/>';
+const windIcon  = '<path d="M17.7 7.7a2.5 2.5 0 1 1 1.8 4.3H2"/><path d="M9.6 4.6A2 2 0 1 1 11 8H2"/><path d="M12.6 19.4A2 2 0 1 0 14 16H2"/>';
+const dropIcon  = '<path d="M12 2.69l5.66 5.66a8 8 0 1 1-11.31 0z"/>';
+const zapIcon   = '<polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/>';
+const actIcon   = '<polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/>';
+const batIcon   = '<rect x="2" y="7" width="16" height="10" rx="2" ry="2"/><line x1="22" y1="11" x2="22" y2="13"/>';
+const clockIcon = '<circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/>';
+
+const ALL_PIDS = [
+  // ─── ZÁKLADNÍ ÚDAJE (Core) ──────────────────────────────────────
+  { key:'rpm',             label:'RPM',             pid:'0x0C', unit:'rpm',    icon:actIcon,   warn:v=>v>6500 },
+  { key:'speed',           label:'Speed',           pid:'0x0D', unit:'km/h',   icon:gaugeIcon, warn:null },
+  { key:'coolantTemp',     label:'Coolant Temp',    pid:'0x05', unit:'°C',     icon:thermIcon, warn:v=>v>105 },
+  { key:'throttle',        label:'Throttle Pos.',   pid:'0x11', unit:'%',      icon:gaugeIcon, warn:null },
+  { key:'engineLoad',      label:'Engine Load',     pid:'0x04', unit:'%',      icon:actIcon,   warn:v=>v>90 },
+  { key:'absoluteLoad',    label:'Absolute Load',   pid:'0x43', unit:'%',      icon:actIcon,   warn:null },
+
+  // ─── TEPLOTY (Temperatures) ─────────────────────────────────────
+  { key:'intakeAirTemp',   label:'Intake Air',      pid:'0x0F', unit:'°C',     icon:thermIcon, warn:null },
+  { key:'outdoorTemp',     label:'Outdoor Temp',    pid:'0x46', unit:'°C',     icon:thermIcon, warn:null },
+  { key:'catalystTemp',    label:'Catalyst Temp',   pid:'0x3C', unit:'°C',     icon:thermIcon, warn:v=>v>800 },
+  { key:'oilTemp',         label:'Engine Oil',      pid:'0x5C', unit:'°C',     icon:thermIcon, warn:v=>v>120 },
+
+  // ─── TLAKY A VZDUCH (Pressures & Air) ───────────────────────────
+  { key:'mapPressure',     label:'MAP Pressure',    pid:'0x0B', unit:'kPa',    icon:gaugeIcon, warn:null },
+  { key:'barometric',      label:'Baro. Pressure',  pid:'0x33', unit:'kPa',    icon:gaugeIcon, warn:null },
+  { key:'maf',             label:'MAF Flow Rate',   pid:'0x10', unit:'g/s',    icon:windIcon,  warn:null },
+
+  // ─── PALIVO A SMĚS (Fuel & Mixture) ─────────────────────────────
+  { key:'fuelConsumption', label:'Fuel Consump.',   pid:'0x5E', unit:'L/h',    icon:dropIcon,  warn:null },
+  { key:'fuelLevel',       label:'Fuel Level',      pid:'0x2F', unit:'%',      icon:dropIcon,  warn:v=>v<10 },
+  { key:'fuelPressure',    label:'Fuel Pressure',   pid:'0x0A', unit:'kPa',    icon:gaugeIcon, warn:null },
+  { key:'fuelRail',        label:'Fuel Rail Pres.', pid:'0x23', unit:'kPa',    icon:gaugeIcon, warn:null },
+  { key:'ethanolPct',      label:'Ethanol %',       pid:'0x52', unit:'%',      icon:dropIcon,  warn:null },
+  { key:'lambda',          label:'Equiv. Ratio (λ)',pid:'0x44', unit:'',       icon:actIcon,   warn:null },
+  { key:'o2Voltage',       label:'O2 Sensor Vol.',  pid:'0x14', unit:'V',      icon:zapIcon,   warn:null },
+  { key:'stft',            label:'Short Term FT',   pid:'0x06', unit:'%',      icon:actIcon,   warn:v=>v>15||v<-15 },
+  { key:'ltft',            label:'Long Term FT',    pid:'0x07', unit:'%',      icon:actIcon,   warn:v=>v>15||v<-15 },
+
+  // ─── ŘÍZENÍ MOTORU (Engine Management) ──────────────────────────
+  { key:'ignitionTiming',  label:'Ignition Timing', pid:'0x0E', unit:'°',      icon:zapIcon,   warn:null },
+  { key:'egrCommanded',    label:'EGR Commanded',   pid:'0x2C', unit:'%',      icon:windIcon,  warn:null },
+  { key:'egrError',        label:'EGR Error',       pid:'0x2D', unit:'%',      icon:windIcon,  warn:null },
+  { key:'evapPurge',       label:'EVAP Purge',      pid:'0x2E', unit:'%',      icon:windIcon,  warn:null },
+
+  // ─── ELEKTRIKA A OSTATNÍ (Electrical & Misc) ────────────────────
+  { key:'systemVoltage',   label:'System Voltage',  pid:'0x42', unit:'V',      icon:batIcon,   warn:v=>v<12 },
+  { key:'engineRuntime',   label:'Engine Runtime',  pid:'0x1F', unit:'min',    icon:clockIcon, warn:null },
+  { key:'milDistance',     label:'MIL Distance',    pid:'0x21', unit:'km',     icon:actIcon,   warn:v=>v>0 },
+  { key:'distCleared',     label:'Dist. Since Clr', pid:'0x31', unit:'km',    icon:actIcon,   warn:null },
+  { key:'hybridBattery',   label:'Hybrid Battery',  pid:'0x5B', unit:'%',      icon:batIcon,   warn:v=>v<20 }
+];
+
+
+const SECTIONS = [
+  { id:'vd-basic',  keys:['rpm','speed','coolantTemp','throttle','engineLoad','absoluteLoad'] },
+  { id:'vd-temps',  keys:['intakeAirTemp','outdoorTemp','catalystTemp','oilTemp'] },
+  { id:'vd-fuel',   keys:['fuelConsumption','fuelLevel','fuelPressure','fuelRail','ethanolPct','lambda','o2Voltage','stft','ltft'] },
+  { id:'vd-engine', keys:['mapPressure','barometric','maf','ignitionTiming','egrCommanded','egrError','evapPurge'] },
+  { id:'vd-elec',   keys:['systemVoltage','engineRuntime','milDistance','distCleared','hybridBattery'] },
+];
+
+// PID selector
+const STORAGE_KEY = 'obd_dashboard_pids';
+let selectedPids = (() => { try { return JSON.parse(localStorage.getItem(STORAGE_KEY)) || ['rpm','speed','coolantTemp','systemVoltage','engineLoad']; } catch { return ['rpm','speed','coolantTemp','systemVoltage','engineLoad']; } })();
+
+function renderSelector() {
+  const d = getData();
+  const wasOpen = document.getElementById('pid-dropdown')?.style.display === 'block';
+  const wrap = document.getElementById('pid-selector');
+  const supported = ALL_PIDS.filter(p => d[p.key] != null);
+
+  if (supported.length === 0) {
+    wrap.innerHTML = '<div style="padding:8px;color:var(--muted-foreground);font-size:12px;font-family:Inter,sans-serif">Connect sniffer to see supported PIDs</div>';
+    document.getElementById('pid-selected-summary').textContent = selectedPids.length + ' values selected';
+    if (wasOpen) document.getElementById('pid-dropdown').style.display = 'block';
+    return;
+  }
+
+  wrap.innerHTML = supported.map(p => `
+    <button class="pid-toggle ${selectedPids.includes(p.key)?'active':''}" data-key="${p.key}">
+      <span class="pt-check">${selectedPids.includes(p.key)?'✓':''}</span>
+      ${p.label}
+    </button>`).join('');
+
+  wrap.querySelectorAll('.pid-toggle').forEach(btn => {
+    btn.addEventListener('click', (e) => {
+      e.stopPropagation();
+      const key = btn.dataset.key;
+      if (selectedPids.includes(key)) {
+        selectedPids = selectedPids.filter(k => k !== key);
+      } else {
+        if (selectedPids.length >= 5) selectedPids.shift();
+        selectedPids.push(key);
+      }
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(selectedPids));
+      renderSelector();
+      document.getElementById('pid-selected-summary').textContent = selectedPids.length + ' values selected';
+    });
+  });
+
+  document.getElementById('pid-selected-summary').textContent = selectedPids.length + ' values selected';
+  if (wasOpen) document.getElementById('pid-dropdown').style.display = 'block';
+}
+
+function renderCards(d) {
+  SECTIONS.forEach(sec => {
+    const el = document.getElementById(sec.id);
+    if (!el) return;
+    const cards = sec.keys
+      .filter(key => d[key] != null)   // jen PIDy které auto podporuje
+      .map(key => {
+        const p = ALL_PIDS.find(x => x.key === key);
+        if (!p) return '';
+        const value = d[p.key];
+        const v = typeof value === 'number' ? value.toFixed(value % 1 === 0 ? 0 : 1) : '--';
+        const warn = p.warn ? p.warn(value) : false;
+        return `<div class="data-card glass-card ${warn?'warn':''}">
+          <div class="dc-icon-row"><svg viewBox="0 0 24 24">${p.icon}</svg><span class="dc-lbl">${p.label}</span></div>
+          <div><span class="dc-val font-mono">${v}</span> <span class="dc-unit">${p.unit}</span></div>
+        </div>`;
+      }).join('');
+    el.innerHTML = cards || '<div style="padding:12px;color:hsl(215,15%,40%);font-size:12px;font-family:Inter,sans-serif">No supported PIDs in this category</div>';
+  });
+}
+
+// History
+const historyData = [];
+let frame = 0;
+
+function recordData(d) {
+  historyData.unshift({
+    time: new Date().toLocaleTimeString(),
+    rpm: Math.round(d.rpm), speed: Math.round(d.speed),
+    coolant: d.coolantTemp.toFixed(1), voltage: d.systemVoltage.toFixed(1),
+    fuel: d.fuelConsumption.toFixed(1), load: d.engineLoad.toFixed(0),
+  });
+  if (historyData.length > 200) historyData.pop();
+  renderHistory();
+}
+
+function renderHistory() {
+  const tbody = document.getElementById('history-tbody');
+  if (!historyData.length) {
+    tbody.innerHTML = '<tr><td colspan="8" class="history-empty">History will begin filling automatically…</td></tr>';
+    return;
+  }
+  tbody.innerHTML = historyData.map((r, i) => `<tr>
+    <td style="color:var(--muted-foreground)">${historyData.length - i}</td>
+    <td style="color:var(--muted-foreground)">${r.time}</td>
+    <td>${r.rpm}</td><td>${r.speed}</td>
+    <td class="${parseFloat(r.coolant)>100?'danger':''}">${r.coolant}</td>
+    <td class="${parseFloat(r.voltage)<12?'danger':''}">${r.voltage}</td>
+    <td>${r.fuel}</td>
+    <td class="${parseFloat(r.load)>85?'warn':''}">${r.load}</td>
+  </tr>`).join('');
+  document.getElementById('hs-count').textContent = historyData.length;
+  document.getElementById('hs-maxspeed').textContent = Math.max(...historyData.map(r=>r.speed)) + ' km/h';
+  document.getElementById('hs-avgrpm').textContent = Math.round(historyData.reduce((s,r)=>s+r.rpm,0)/historyData.length);
+  document.getElementById('hs-maxtemp').textContent = Math.max(...historyData.map(r=>parseFloat(r.coolant))).toFixed(1) + '°C';
+}
+
+document.getElementById('btn-export').addEventListener('click', () => {
+  if (!historyData.length) return;
+  const rows = historyData.map(r=>`${r.time},${r.rpm},${r.speed},${r.coolant},${r.voltage},${r.fuel},${r.load}`).join('\n');
+  const a = Object.assign(document.createElement('a'),{href:URL.createObjectURL(new Blob(['Time,RPM,Speed,Coolant,Voltage,Consumption,Load\n'+rows],{type:'text/csv'})),download:`obd_${new Date().toISOString().slice(0,10)}.csv`});
+  a.click();
+});
+
+document.getElementById('btn-clear').addEventListener('click', () => {
+  if (!confirm('Clear entire history?')) return;
+  historyData.length = 0;
+  renderHistory();
+});
+
+function isDataAvailable(d) {
+  return d && Object.keys(d).filter(k => !k.startsWith('_')).length > 0;
+}
+
+function update() {
+  const d = getData();
+  const hasData = isDataAvailable(d);
+
+  const banner = document.getElementById('no-data-banner');
+  const sections = document.getElementById('pid-sections');
+  const dropWrap = document.getElementById('pid-dropdown-wrap');
+
+  if (!hasData) {
+    if (banner) banner.style.display = 'block';
+    if (sections) sections.style.display = 'none';
+    if (dropWrap) dropWrap.style.display = 'none';
+    return;
+  }
+
+  // Data jsou — zobraz vše
+  if (banner) banner.style.display = 'none';
+  if (sections) sections.style.display = 'block';
+  if (dropWrap) dropWrap.style.display = 'block';
+
+  renderCards(d);
+  frame++;
+  if (frame % 25 === 0) recordData(d);
+}
+
+renderSelector();
+
+const dropBtn = document.getElementById('pid-dropdown-btn');
+const dropdown = document.getElementById('pid-dropdown');
+const arrow = document.getElementById('pid-arrow');
+
+dropBtn.addEventListener('click', (e) => {
+  e.stopPropagation();
+  const open = dropdown.style.display === 'block';
+  dropdown.style.display = open ? 'none' : 'block';
+  arrow.style.transform = open ? '' : 'rotate(180deg)';
+});
+
+document.addEventListener('click', e => {
+  if (!document.getElementById('pid-dropdown-wrap').contains(e.target)) {
+    dropdown.style.display = 'none';
+    arrow.style.transform = '';
+  }
+});
+
+setInterval(update, 200);
+update();
+</script>
+</body>
+</html>

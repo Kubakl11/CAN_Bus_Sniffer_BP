@@ -1,0 +1,303 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Graphs — OBD-II</title>
+<script>
+  // Apply saved theme before render — prevents dark→light flash on page load
+  (function() {
+    const t = localStorage.getItem('obd_theme');
+    if (t === 'light') document.documentElement.setAttribute('data-theme', 'light');
+  })();
+</script>
+<link rel="stylesheet" href="style.css">
+<script src="chart.min.js"></script>
+<script src="hammer.min.js"></script>
+<script src="chartsjs-plugin-zoom.js"></script>
+
+
+<style>
+.graphs-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 14px;
+}
+@media(max-width:640px){.graphs-grid{grid-template-columns:1fr}}
+
+.graph-card {
+  border-radius: var(--radius);
+  padding: 14px;
+}
+.graph-hdr {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 8px;
+}
+.graph-label {
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: .15em;
+  text-transform: uppercase;
+  color: var(--muted-foreground);
+}
+.graph-val {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 13px;
+  font-weight: 700;
+}
+.graph-canvas-wrap {
+  height: 160px;
+  width: 100%;
+}
+.graph-footer {
+  display: flex;
+  justify-content: flex-end;
+  margin-top: 6px;
+}
+.graph-reset {
+  font-size: 9px;
+  letter-spacing: .1em;
+  text-transform: uppercase;
+  color: var(--muted-foreground);
+  background: none;
+  border: none;
+  cursor: pointer;
+  padding: 2px 6px;
+  border-radius: 4px;
+  transition: color .2s;
+}
+.graph-reset:hover { color: var(--primary); }
+</style>
+</head>
+<body>
+
+<!-- ══ Theme BUTTON ══════════════════════════════════════════════════════ -->
+  <button class="theme-toggle" onclick="toggleTheme()" aria-label="Toggle theme">
+  <svg class="icon-moon" viewBox="0 0 24 24"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/></svg>
+  <svg class="icon-sun" viewBox="0 0 24 24"><circle cx="12" cy="12" r="5"/><line x1="12" y1="1" x2="12" y2="3"/><line x1="12" y1="21" x2="12" y2="23"/><line x1="4.22" y1="4.22" x2="5.64" y2="5.64"/><line x1="18.36" y1="18.36" x2="19.78" y2="19.78"/><line x1="1" y1="12" x2="3" y2="12"/><line x1="21" y1="12" x2="23" y2="12"/><line x1="4.22" y1="19.78" x2="5.64" y2="18.36"/><line x1="18.36" y1="5.64" x2="19.78" y2="4.22"/></svg>
+</button>
+<script>
+  function toggleTheme() {
+    const cur = document.documentElement.getAttribute('data-theme');
+    const next = cur === 'light' ? 'dark' : 'light';
+    if (next === 'light') {
+      document.documentElement.setAttribute('data-theme', 'light');
+      localStorage.setItem('obd_theme', 'light');
+    } else {
+      document.documentElement.removeAttribute('data-theme');
+      localStorage.setItem('obd_theme', 'dark');
+    }
+  }
+</script>
+
+<div class="page active" style="display:block">
+
+  <div class="page-header">
+    <a href="dashboard.html" class="back-btn">
+      <svg viewBox="0 0 24 24"><polyline points="15 18 9 12 15 6"/></svg>
+    </a>
+    <div>
+      <div class="page-title">Live Graphs</div>
+    </div>
+  </div>
+
+  <div class="graphs-grid" id="graphs-grid">
+    <!-- Graphs are generated dynamically based on available PIDs -->
+  </div>
+<button id="btn-clear-graphs" style="font-size:15px;padding:8px 16px;border-radius:8px;background:hsla(0,85%,55%,.1);border:1px solid hsla(0,85%,55%,.3);color:var(--bmw-red);cursor:pointer">
+  🗑 Reset graphs
+</button>
+</div>
+
+<!-- Bottom nav -->
+<nav class="bottom-nav">
+  <div class="nav-inner">
+    <button class="nav-item" id="nb-cockpit" onclick="window.location.href='dashboard.html'">
+      <svg viewBox="0 0 24 24"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/></svg>
+      <span class="nav-label">Cockpit</span>
+    </button>
+    <button class="nav-item" id="nb-vehicle-data" onclick="window.location.href='vehicle-data.html'">
+      <svg viewBox="0 0 24 24"><ellipse cx="12" cy="5" rx="9" ry="3"/><path d="M21 12c0 1.66-4 3-9 3s-9-1.34-9-3"/><path d="M3 5v14c0 1.66 4 3 9 3s9-1.34 9-3V5"/></svg>
+      <span class="nav-label">Data</span>
+    </button>
+    <button class="nav-item active" id="nb-graphs" onclick="window.location.href='graphs.html'">
+      <svg viewBox="0 0 24 24"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg>
+      <span class="nav-label">Graphs</span>
+    </button>
+    <button class="nav-item" id="nb-alarms" onclick="window.location.href='alarms.html'">
+      <svg viewBox="0 0 24 24"><path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 0 1-3.46 0"/></svg>
+      <span class="nav-label">Alarms</span>
+    </button>
+    <button class="nav-item" id="nb-consumption" onclick="window.location.href='consumption.html'">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <path d="M14 3H5a1 1 0 0 0-1 1v16a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1V9"/>
+        <path d="M14 3v6h4"/>
+        <path d="M18 9l3-3"/>
+        <path d="M21 6V3h-3"/>
+        <line x1="7" y1="13" x2="15" y2="13"/>
+        <line x1="7" y1="17" x2="15" y2="17"/>
+      </svg>
+      <span class="nav-label">Consumption</span>
+    </button>
+  </div>
+</nav>
+
+<script type="module">
+import { getData, getTripHistory, clearTripHistory } from './data.js';
+
+
+
+const GRAPH_DEFS = [
+  { key: 'rpm',             label: 'RPM',              unit: 'rpm',  color: '#1C69D4', yMin: 0,  yMax: 8000 },
+  { key: 'speed',           label: 'Speed',            unit: 'km/h', color: '#00C49F', yMin: 0,  yMax: 280  },
+  { key: 'coolantTemp',     label: 'Coolant Temp',     unit: '°C',   color: '#FF6B00', yMin: 0,  yMax: 130  },
+  { key: 'engineLoad',      label: 'Engine Load',      unit: '%',    color: '#8884d8', yMin: 0,  yMax: 100  },
+  { key: 'throttle',        label: 'Throttle',         unit: '%',    color: '#FFBB28', yMin: 0,  yMax: 100  },
+  { key: 'fuelConsumption', label: 'Fuel Consumption', unit: 'L/h',  color: '#FF4444', yMin: 0,  yMax: 20   },
+  { key: 'systemVoltage',   label: 'System Voltage',   unit: 'V',    color: '#FF9F40', yMin: 10, yMax: 16   },
+  { key: 'intakeAirTemp',   label: 'Intake Air',       unit: '°C',   color: '#4BC0C0', yMin: 0,  yMax: 80   },
+  { key: 'mapPressure',     label: 'MAP Pressure',     unit: 'kPa',  color: '#9966FF', yMin: 0,  yMax: 200  },
+  { key: 'maf',             label: 'MAF',              unit: 'g/s',  color: '#36A2EB', yMin: 0,  yMax: 100  },
+  { key: 'o2Voltage',       label: 'O2 Sensor',        unit: 'V',    color: '#FF6384', yMin: 0,  yMax: 1    },
+  { key: 'catalystTemp',    label: 'Catalyst',         unit: '°C',   color: '#FF3333', yMin: 0,  yMax: 900  },
+];
+
+Chart.defaults.color         = 'hsl(215,15%,50%)';
+Chart.defaults.borderColor   = 'hsla(220,15%,20%,0.5)';
+Chart.defaults.font.family   = "'JetBrains Mono', monospace";
+Chart.defaults.font.size     = 10;
+
+const grid   = document.getElementById('graphs-grid');
+const charts = {};
+let initialised = false;
+
+// ── Inicializace grafů — až přijdou první data z ESP ──────────
+function initGraphs(data) {
+    if (initialised) return;
+
+    
+    const available = GRAPH_DEFS.filter(g => data[g.key] != null);
+    
+
+    if (available.length < 2) return;  
+    
+    initialised = true;
+
+    const history = getTripHistory();
+
+    grid.innerHTML = available.map(g => `
+      <div class="graph-card glass-card">
+        <div class="graph-hdr">
+          <span class="graph-label">${g.label}</span>
+          <span class="graph-val font-mono" id="gv-${g.key}" style="color:${g.color}">—</span>
+        </div>
+        <div class="graph-canvas-wrap"><canvas id="gc-${g.key}"></canvas></div>
+        <div class="graph-footer">
+          <button class="graph-reset" onclick="resetZoom('${g.key}')">↺ Reset zoom</button>
+        </div>
+      </div>
+    `).join('');
+
+    available.forEach(g => {
+        // Předvyplň daty z localStorage
+        const histLabels = history.map(h => new Date(h.t).toLocaleTimeString());
+        const histData   = history.map(h => h[g.key] ?? null);
+
+        const ctx = document.getElementById(`gc-${g.key}`).getContext('2d');
+        charts[g.key] = new Chart(ctx, {
+            type: 'line',
+            data: {
+                labels:   histLabels,
+                datasets: [{
+                    label:           g.label,
+                    data:            histData,
+                    borderColor:     g.color,
+                    borderWidth:     2,
+                    tension:         0.3,
+                    pointRadius:     0,
+                    fill:            true,
+                    backgroundColor: g.color + '18',
+                }]
+            },
+            options: {
+                animation:          false,
+                responsive:         true,
+                maintainAspectRatio: false,
+                interaction: { mode: 'index', intersect: false },
+                scales: {
+                    x: {
+                        title: { display: true, text: 'Time', color: 'hsl(215,15%,40%)', font: { size: 9 } },
+                        ticks: { maxTicksLimit: 6, maxRotation: 0, font: { size: 9 } },
+                        grid:  { color: 'hsla(220,15%,20%,0.4)' }
+                    },
+                    y: {
+                        min:   g.yMin,
+                        max:   g.yMax,
+                        title: { display: true, text: g.unit, color: 'hsl(215,15%,40%)', font: { size: 9 } },
+                        ticks: { font: { size: 9 } },
+                        grid:  { color: 'hsla(220,15%,20%,0.4)' }
+                    }
+                },
+                plugins: {
+                    legend: { display: false },
+                    tooltip: {
+                        backgroundColor: 'hsla(220,18%,14%,0.95)',
+                        borderColor:     'hsl(220,15%,25%)',
+                        borderWidth:     1,
+                        titleColor:      'hsl(215,15%,50%)',
+                        bodyColor:       g.color,
+                        callbacks: { label: ctx => `${ctx.parsed.y?.toFixed(1)} ${g.unit}` }
+                    },
+                    zoom: {
+                        zoom: { wheel: { enabled: true }, pinch: { enabled: true }, mode: 'x' },
+                        pan:  { enabled: true, mode: 'x' }
+                    }
+                }
+            }
+        });
+    });
+}
+
+// ── Live update ───────────────────────────────────────────────
+function update() {
+    const d    = getData();
+    const now  = new Date().toLocaleTimeString();
+
+    // Pokud grafy ještě nejsou inicializované, zkus teď
+    if (!initialised) { initGraphs(d); return; }
+
+    GRAPH_DEFS.forEach(g => {
+        const chart = charts[g.key];
+        if (!chart) return;
+        const value = d[g.key];
+        if (value == null) return;
+
+        chart.data.labels.push(now);
+        chart.data.datasets[0].data.push(value);
+        chart.update('none');
+
+        const dec = value % 1 === 0 ? 0 : 1;
+        document.getElementById(`gv-${g.key}`).textContent = value.toFixed(dec) + ' ' + g.unit;
+    });
+}
+
+window.resetZoom = key => charts[key]?.resetZoom();
+
+// Tlačítko pro smazání historie jízdy
+document.getElementById('btn-clear-graphs').addEventListener('click', () => {
+    if (!confirm('Clear trip history?')) return;
+    clearTripHistory();
+    Object.values(charts).forEach(c => {
+        c.data.labels = [];
+        c.data.datasets[0].data = [];
+        c.update('none');
+    });
+});
+
+setInterval(update, 200);
+update();
+</script>
+</body>
+</html>

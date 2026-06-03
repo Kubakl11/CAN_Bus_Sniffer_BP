@@ -1,0 +1,381 @@
+/* ── DESIGN TOKENS ───────────────────────────────────────────────────── */
+:root {
+  --background:       hsl(220,18%,9%);
+  --background-2:     hsl(220,18%,11%);
+  --background-3:     hsl(220,18%,14%);
+  --foreground:       hsl(210,20%,90%);
+  --muted-foreground: hsl(215,15%,50%);
+  --border:           hsl(220,15%,20%);
+  --primary:          hsl(213,85%,47%);
+  --primary-glow:     hsla(213,85%,47%,0.35);
+  --bmw-blue:         hsl(213,85%,47%);
+  --bmw-red:          hsl(0,85%,55%);
+  --bmw-orange:       hsl(25,100%,55%);
+  --status-ok:        hsl(142,70%,45%);
+  --status-warn:      hsl(40,100%,55%);
+  --status-danger:    hsl(0,85%,55%);
+  --logout-color:     hsl(19, 89%, 47%);
+  --secondary:        hsl(220,15%,18%);
+  --radius:           12px;
+
+  /* Card-specific tokens — overridden in light mode below */
+  --card-bg:          hsla(220,18%,14%,0.92);
+  --card-bg-hover:    hsla(220,18%,17%,0.95);
+  --card-border:      var(--border);
+  --history-th-bg:    hsla(220,18%,14%,.98);
+  --row-divider:      hsla(220,15%,20%,.5);
+  --row-divider-soft: hsla(220,15%,20%,.4);
+
+  /* Glow strengths — dimmed in light mode so the BMW-blue glow
+     doesn't smudge readable text on a bright background. */
+  --primary-text-glow: 0 0 20px var(--primary-glow);
+  --primary-val-glow:  0 0 15px var(--primary-glow);
+  --hero-num-glow:     0 0 30px var(--primary-glow);
+  --danger-text-glow:  0 0 12px hsla(0,85%,55%,.5);
+  --danger-val-glow:   0 0 15px hsla(0,85%,55%,.5);
+}
+
+/* ── LIGHT MODE OVERRIDES ─────────────────────────────────────────────
+   Activated by `<html data-theme="light">`. Overrides the same tokens
+   so the rest of the stylesheet stays unchanged.
+   The dark instrument-cluster look of the gauges (blue gradients,
+   orange needle) is intentionally preserved — that's the cockpit feel.
+*/
+[data-theme="light"] {
+  /* Subtle blue-tinted neutrals — coherent with primary color, not a default grey */
+  --background:       hsl(215,30%,97%);
+  --background-2:     hsl(215,25%,94%);
+  --background-3:     hsl(215,20%,91%);
+  --foreground:       hsl(220,30%,12%);
+  --muted-foreground: hsl(220,12%,42%);
+  --border:           hsl(215,20%,86%);
+  --primary:          hsl(213,90%,45%);
+  --primary-glow:     hsla(213,90%,45%,0.20);
+  --secondary:        hsl(215,20%,90%);
+
+  /* Card stays pure white — contrasts beautifully against the tinted bg */
+  --card-bg:          hsl(0,0%,100%);
+  --card-bg-hover:    hsl(215,30%,99%);
+  --card-border:      hsl(215,20%,88%);
+  --history-th-bg:    hsl(0,0%,100%);
+  --row-divider:      hsl(215,20%,92%);
+  --row-divider-soft: hsl(215,20%,94%);
+
+  /* Replace blurry text-glows with crisp gradient effects on key numbers */
+  --primary-text-glow: none;
+  --primary-val-glow:  none;
+  --hero-num-glow:     none;
+  --danger-text-glow:  none;
+  --danger-val-glow:   none;
+
+  /* Light-mode-only: layered card shadows for depth */
+  --card-shadow:       0 1px 2px hsla(220,30%,15%,.04), 0 4px 12px hsla(220,30%,15%,.05);
+  --card-shadow-hover: 0 2px 4px hsla(220,30%,15%,.05), 0 8px 24px hsla(213,90%,45%,.10);
+}
+
+*{box-sizing:border-box;margin:0;padding:0}
+html,body{height:100%;background:var(--background);color:var(--foreground);font-family:'Inter',sans-serif;font-size:14px;overflow-x:hidden;transition:background .25s ease,color .25s ease}
+
+/* Light-mode subtle gradient — adds depth without distracting from data */
+[data-theme="light"] body{
+  background:
+    radial-gradient(ellipse 1200px 600px at top right, hsla(213,90%,75%,.08), transparent 60%),
+    radial-gradient(ellipse 1000px 500px at bottom left, hsla(213,90%,70%,.06), transparent 60%),
+    var(--background);
+  background-attachment:fixed;
+}
+
+/* ── GLASS CARD ──────────────────────────────────────────────────────── */
+.glass-card{
+  background:var(--card-bg);
+  border:1px solid var(--card-border);
+}
+.glass-card-hover{
+  background:var(--card-bg);
+  border:1px solid var(--card-border);
+  cursor:pointer;
+  transition:border-color .2s,background .2s,transform .2s,box-shadow .2s;
+}
+.glass-card-hover:hover{border-color:hsla(213,85%,47%,0.5);background:var(--card-bg-hover)}
+
+/* Light-mode: layered shadows + lift on hover */
+[data-theme="light"] .glass-card,
+[data-theme="light"] .glass-card-hover{box-shadow:var(--card-shadow)}
+[data-theme="light"] .glass-card-hover:hover{
+  box-shadow:var(--card-shadow-hover);
+  transform:translateY(-2px);
+}
+
+/* ── TYPOGRAPHY ──────────────────────────────────────────────────────── */
+.font-mono{font-family:'JetBrains Mono',monospace}
+.bmw-glow{text-shadow:var(--primary-text-glow)}
+.m-red-glow{text-shadow:0 0 15px hsla(0,85%,55%,0.5)}
+[data-theme="light"] .m-red-glow{text-shadow:none}
+.tracking-wider{letter-spacing:.05em}
+.uppercase{text-transform:uppercase}
+
+/* ── LAYOUT ──────────────────────────────────────────────────────────── */
+.page{display:none;padding:16px 16px 100px;max-width:1100px;margin:0 auto}
+.page.active{display:block}
+@media(min-width:640px){.page{padding:24px 24px 100px}}
+
+/* ── ANIMATIONS ──────────────────────────────────────────────────────── */
+@keyframes pulse{0%,100%{opacity:1}50%{opacity:.4}}
+@keyframes pulse-glow{0%,100%{box-shadow:0 0 8px var(--primary);opacity:1}50%{box-shadow:0 0 8px var(--primary);opacity:.5}}
+.animate-pulse{animation:pulse 2s ease-in-out infinite}
+.animate-pulse-glow{animation:pulse-glow 2s ease-in-out infinite}
+
+/* ── THEME TOGGLE BUTTON ─────────────────────────────────────────────── */
+.theme-toggle{
+  position:fixed;top:14px;right:30px;z-index:1000;
+  width:38px;height:38px;border-radius:50%;
+  background:var(--card-bg);border:1px solid var(--card-border);
+  color:var(--foreground);cursor:pointer;
+  display:flex;align-items:center;justify-content:center;
+  transition:border-color .2s,background .2s,transform .2s,box-shadow .2s;
+}
+.theme-toggle:hover{border-color:var(--primary);transform:rotate(15deg)}
+.theme-toggle svg{width:18px;height:18px;stroke:currentColor;fill:none;stroke-width:2;stroke-linecap:round;stroke-linejoin:round}
+[data-theme="light"] .theme-toggle{box-shadow:var(--card-shadow)}
+[data-theme="light"] .theme-toggle:hover{box-shadow:var(--card-shadow-hover)}
+
+/* Icon shows what you'll GET after click:
+   dark mode → show sun (click for light) | light mode → show moon (click for dark) */
+.theme-toggle .icon-moon{display:none}
+.theme-toggle .icon-sun{display:block}
+[data-theme="light"] .theme-toggle .icon-moon{display:block}
+[data-theme="light"] .theme-toggle .icon-sun{display:none}
+
+/* ── DIAG FLOATING BUTTON ────────────────────────────────────────────── */
+.diag-fab{
+  position:fixed;top:62px;right:30px;z-index:1000;
+  width:38px;height:38px;border-radius:50%;
+  background:linear-gradient(135deg, hsl(213,85%,47%), hsl(0,85%,55%));
+  border:none;cursor:pointer;
+  display:flex;align-items:center;justify-content:center;
+  box-shadow:0 0 12px hsla(213,85%,47%,.4);
+  text-decoration:none;
+  transition:transform .2s,box-shadow .2s;
+}
+.diag-fab:hover{
+  transform:scale(1.08);
+  box-shadow:0 0 18px hsla(213,85%,47%,.6), 0 0 12px hsla(0,85%,55%,.3);
+}
+.diag-fab svg{width:18px;height:18px;stroke:white;fill:none;stroke-width:2;stroke-linecap:round;stroke-linejoin:round}
+
+
+/* ── BOTTOM NAV ──────────────────────────────────────────────────────── */
+.bottom-nav{
+  position:fixed;bottom:0;left:0;right:0;z-index:1000;
+  background:hsl(220,18%,11%);
+  border-top:1px solid var(--card-border);
+  box-shadow:0 -4px 20px hsla(0,0%,0%,.35);
+}
+[data-theme="light"] .bottom-nav{
+  background:hsl(0,0%,100%);
+  box-shadow:0 -4px 20px hsla(220,30%,20%,.06);
+  border-top-color:transparent;
+}
+.nav-inner{
+  display:flex;justify-content:space-around;align-items:center;
+  max-width:480px;margin:0 auto;padding:6px 8px 10px;
+}
+.nav-item{
+  display:flex;flex-direction:column;align-items:center;gap:2px;
+  padding:6px 12px;border-radius:8px;cursor:pointer;
+  text-decoration:none;color:var(--muted-foreground);
+  transition:color .2s;background:none;border:none;
+}
+.nav-item svg{width:16px;height:16px;stroke:currentColor;fill:none;stroke-width:2;stroke-linecap:round;stroke-linejoin:round}
+.nav-item .nav-label{font-size:9px;letter-spacing:.12em;text-transform:uppercase;font-weight:500}
+.nav-item.active{color:var(--primary)}
+.nav-item.active svg{filter:drop-shadow(0 0 5px var(--primary))}
+[data-theme="light"] .nav-item.active svg{filter:none}
+
+/* ── COCKPIT PAGE ────────────────────────────────────────────────────── */
+.cockpit-header{text-align:center;margin-bottom:20px;padding-top:4px}
+.cockpit-header .eyebrow{font-size:10px;letter-spacing:.3em;color:var(--muted-foreground);text-transform:uppercase;margin-bottom:6px}
+.cockpit-title{font-size:clamp(20px,5vw,32px);font-weight:700;letter-spacing:.15em;text-transform:uppercase}
+.cockpit-title span{color:var(--primary);text-shadow:var(--primary-text-glow)}
+[data-theme="light"] .cockpit-title span{
+  background:linear-gradient(135deg, hsl(213,90%,45%), hsl(225,85%,55%));
+  -webkit-background-clip:text;background-clip:text;color:transparent;
+}
+.cockpit-line{display:flex;align-items:center;justify-content:center;gap:12px;margin-top:6px}
+.cockpit-line::before,.cockpit-line::after{content:'';height:1px;width:48px}
+.cockpit-line::before{background:linear-gradient(to right,transparent,var(--primary-glow))}
+.cockpit-line::after{background:linear-gradient(to left,transparent,var(--primary-glow))}
+.cockpit-live{font-size:10px;letter-spacing:.3em;color:var(--status-ok);text-transform:uppercase;font-family:'JetBrains Mono',monospace}
+.cockpit-live::before{content:'● ';animation:pulse 2s infinite}
+
+/* Gauges row */
+.gauges-row{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:32px}
+@media(min-width:640px){.gauges-row{gap:32px}}
+.gauge-wrap{display:flex;flex-direction:column;align-items:center;position:relative}
+
+/* Widget grid */
+.widget-grid{display:grid;grid-template-columns:repeat(2,1fr);gap:10px;margin-bottom:20px}
+@media(min-width:900px){.widget-grid{grid-template-columns:repeat(4,1fr)}}
+.widget{border-radius:var(--radius);padding:14px 12px;height:100%}
+.widget-hdr{display:flex;align-items:center;justify-content:space-between;margin-bottom:10px}
+.widget-title{font-size:10px;font-weight:600;letter-spacing:.15em;text-transform:uppercase;color:var(--muted-foreground)}
+.widget-dot{width:7px;height:7px;border-radius:50%;background:var(--primary);box-shadow:0 0 8px var(--primary)}
+.widget-dot.green{background:var(--status-ok);box-shadow:0 0 8px var(--status-ok)}
+.widget-dot.red{background:var(--bmw-red);box-shadow:0 0 8px var(--bmw-red);animation:pulse 1.2s infinite}
+.widget-footer{text-align:center;margin-top:10px;font-size:9px;letter-spacing:.2em;text-transform:uppercase;color:var(--muted-foreground);transition:color .2s}
+.glass-card-hover:hover .widget-footer{color:var(--primary)}
+
+/* Data rows */
+.data-row{display:flex;justify-content:space-between;align-items:center;padding:6px 0;border-bottom:1px solid var(--row-divider)}
+.data-row:last-child{border-bottom:none}
+.data-row .dr-icon{display:flex;align-items:center;gap:6px;color:var(--muted-foreground);font-size:11px}
+.data-row .dr-icon svg{width:13px;height:13px;flex-shrink:0;stroke:currentColor;fill:none;stroke-width:2;stroke-linecap:round;stroke-linejoin:round}
+.data-row .dr-val{font-family:'JetBrains Mono',monospace;font-size:12px;font-weight:600}
+.dr-val.danger{color:var(--bmw-red);text-shadow:var(--danger-text-glow)}
+
+/* Alarm items */
+.alarm-item{display:flex;align-items:center;gap:8px;padding:7px 8px;border-radius:8px;margin-bottom:6px;font-size:11px}
+.alarm-item.critical{background:hsla(0,85%,55%,.08);border:1px solid hsla(0,85%,55%,.25)}
+.alarm-item.warning{background:hsla(25,100%,55%,.08);border:1px solid hsla(25,100%,55%,.25)}
+.alarm-item .adot{width:6px;height:6px;border-radius:50%;flex-shrink:0}
+.alarm-item.critical .adot{background:var(--bmw-red)}
+.alarm-item.warning .adot{background:var(--bmw-orange)}
+.alarm-item .amsg{flex:1;color:var(--foreground);opacity:.75}
+.alarm-item .aval{font-family:'JetBrains Mono',monospace;font-size:10px;color:var(--muted-foreground)}
+.alarm-shield{text-align:center;padding:18px 0}
+.alarm-shield svg{width:32px;height:32px;stroke:var(--status-ok);opacity:.4;margin:0 auto 6px}
+.alarm-shield p{font-size:11px;color:var(--muted-foreground)}
+
+/* Consumption widget */
+.cons-big{text-align:center;padding:8px 0}
+.cons-num{font-family:'JetBrains Mono',monospace;font-size:30px;font-weight:700;color:var(--primary);text-shadow:var(--primary-text-glow)}
+.cons-sub{font-size:9px;letter-spacing:.25em;text-transform:uppercase;color:var(--muted-foreground);margin-top:2px}
+.mini-grid-2{display:grid;grid-template-columns:1fr 1fr;gap:6px;margin-top:8px}
+.mini-cell{background:var(--secondary);border-radius:6px;padding:6px;text-align:center}
+.mini-cell .mc-icon{font-size:11px;margin-bottom:2px}
+.mini-cell .mc-val{font-family:'JetBrains Mono',monospace;font-size:11px}
+.mini-cell .mc-lbl{font-size:8px;color:var(--muted-foreground)}
+.load-bar-wrap{margin-top:8px}
+.load-bar-hdr{display:flex;justify-content:space-between;font-size:9px;color:var(--muted-foreground);margin-bottom:3px}
+.load-bar-track{height:3px;background:var(--secondary);border-radius:99px;overflow:hidden}
+.load-bar-fill{height:100%;border-radius:99px;transition:width .4s ease,background .3s}
+
+/* ── SUBPAGES ─────────────────────────────────────────────────────────── */
+.page-header{display:flex;align-items:center;gap:14px;margin-bottom:20px}
+.back-btn{
+  background:var(--card-bg);border:1px solid var(--card-border);border-radius:8px;
+  padding:7px;cursor:pointer;color:var(--muted-foreground);transition:border-color .2s;
+  display:flex;align-items:center;justify-content:center;
+}
+.back-btn:hover{border-color:hsla(213,85%,47%,.5)}
+.back-btn svg{width:16px;height:16px;stroke:currentColor;fill:none;stroke-width:2;stroke-linecap:round;stroke-linejoin:round}
+.page-title{font-size:clamp(16px,4vw,22px);font-weight:700;letter-spacing:.1em;text-transform:uppercase}
+.page-subtitle{font-size:10px;letter-spacing:.2em;text-transform:uppercase;color:var(--muted-foreground)}
+
+/* ── GRAPHS PAGE ─────────────────────────────────────────────────────── */
+.graphs-grid{display:grid;grid-template-columns:1fr;gap:14px}
+@media(min-width:640px){.graphs-grid{grid-template-columns:1fr 1fr}}
+.graph-card{border-radius:var(--radius);padding:14px}
+.graph-hdr{display:flex;justify-content:space-between;align-items:center;margin-bottom:10px}
+.graph-label{font-size:10px;font-weight:600;letter-spacing:.15em;text-transform:uppercase;color:var(--muted-foreground)}
+.graph-val{font-family:'JetBrains Mono',monospace;font-size:13px;font-weight:700}
+canvas.spark-lg{width:100%;height:100px;display:block;border-radius:4px}
+
+/* ── ALARMS PAGE ─────────────────────────────────────────────────────── */
+.alarm-full{border-radius:var(--radius);padding:14px;margin-bottom:10px;display:flex;align-items:center;gap:12px}
+.alarm-full.critical{background:hsla(0,85%,55%,.08);border:1px solid hsla(0,85%,55%,.25)}
+.alarm-full.warning{background:hsla(25,100%,55%,.08);border:1px solid hsla(25,100%,55%,.25)}
+.alarm-full .af-icon{padding:7px;border-radius:7px;display:flex}
+.alarm-full.critical .af-icon{background:hsla(0,85%,55%,.12)}
+.alarm-full.warning .af-icon{background:hsla(25,100%,55%,.12)}
+.alarm-full .af-icon svg{width:18px;height:18px;stroke:currentColor;fill:none;stroke-width:2;stroke-linecap:round;stroke-linejoin:round}
+.alarm-full.critical .af-icon svg{color:var(--bmw-red)}
+.alarm-full.warning .af-icon svg{color:var(--bmw-orange)}
+.alarm-full .af-body .af-level{font-size:9px;font-weight:600;letter-spacing:.12em;text-transform:uppercase}
+.alarm-full.critical .af-level{color:var(--bmw-red)}
+.alarm-full.warning .af-level{color:var(--bmw-orange)}
+.alarm-full .af-body .af-msg{font-size:12px;color:var(--foreground);margin-top:2px}
+.alarm-full .af-val{font-family:'JetBrains Mono',monospace;font-size:16px;font-weight:700;margin-left:auto}
+
+.status-grid{display:grid;grid-template-columns:repeat(2,1fr);gap:10px;margin-top:20px}
+@media(min-width:640px){.status-grid{grid-template-columns:repeat(4,1fr)}}
+.status-card{border-radius:var(--radius);padding:14px;text-align:center}
+.status-dot-sm{width:7px;height:7px;border-radius:50%;margin:0 auto 6px}
+.status-dot-sm.ok{background:var(--status-ok);box-shadow:0 0 8px var(--status-ok)}
+.status-dot-sm.bad{background:var(--status-danger);box-shadow:0 0 8px var(--status-danger)}
+
+/* ── CONSUMPTION PAGE ────────────────────────────────────────────────── */
+.cons-hero{border-radius:16px;padding:24px;text-align:center;margin-bottom:20px}
+.cons-hero-num{font-family:'JetBrains Mono',monospace;font-size:clamp(48px,12vw,80px);font-weight:700;color:var(--primary);text-shadow:var(--hero-num-glow)}
+[data-theme="light"] .cons-hero-num{
+  background:linear-gradient(135deg, hsl(213,90%,45%), hsl(225,85%,55%));
+  -webkit-background-clip:text;background-clip:text;color:transparent;
+}
+.cons-stat-grid{display:grid;grid-template-columns:repeat(2,1fr);gap:10px;margin-bottom:20px}
+@media(min-width:640px){.cons-stat-grid{grid-template-columns:repeat(4,1fr)}}
+.cons-stat-card{border-radius:var(--radius);padding:14px;text-align:center}
+.cons-stat-card .cs-num{font-family:'JetBrains Mono',monospace;font-size:22px;font-weight:700;color:var(--primary);text-shadow:var(--primary-val-glow)}
+.cons-stat-card .cs-unit{font-size:9px;letter-spacing:.25em;text-transform:uppercase;color:var(--muted-foreground);margin-top:2px}
+.cons-stat-card .cs-lbl{font-size:8px;color:var(--muted-foreground);opacity:.7;margin-top:2px}
+
+/* ── VEHICLE DATA PAGE ───────────────────────────────────────────────── */
+.section-title{font-size:10px;font-weight:600;letter-spacing:.15em;text-transform:uppercase;color:var(--muted-foreground);margin-bottom:10px;display:flex;align-items:center;gap:8px}
+.section-title::before{content:'';display:inline-block;width:3px;height:14px;background:var(--primary);border-radius:2px;flex-shrink:0}
+[data-theme="light"] .section-title::before{
+  background:linear-gradient(180deg, hsl(213,90%,50%), hsl(225,85%,55%));
+}
+.data-card-grid{display:grid;grid-template-columns:repeat(2,1fr);gap:8px;margin-bottom:20px}
+@media(min-width:640px){.data-card-grid{grid-template-columns:repeat(3,1fr)}}
+@media(min-width:900px){.data-card-grid{grid-template-columns:repeat(5,1fr)}}
+.data-card{border-radius:var(--radius);padding:14px;transition:border-color .2s}
+.data-card.warn{border-color:hsla(0,85%,55%,.35)!important}
+.data-card .dc-icon-row{display:flex;align-items:center;gap:6px;margin-bottom:4px}
+.data-card .dc-icon-row svg{width:12px;height:12px;stroke:var(--muted-foreground);fill:none;stroke-width:2;stroke-linecap:round;stroke-linejoin:round}
+.data-card .dc-lbl{font-size:10px;letter-spacing:.1em;text-transform:uppercase;color:var(--muted-foreground)}
+.data-card .dc-pid{font-family:'JetBrains Mono',monospace;font-size:12px;color:var(--muted-foreground);opacity:.6;margin-bottom:6px}
+.data-card .dc-val{font-family:'JetBrains Mono',monospace;font-size:22px;font-weight:700;color:var(--primary);text-shadow:var(--primary-val-glow)}
+.data-card.warn .dc-val{color:var(--bmw-red);text-shadow:var(--danger-val-glow)}
+.data-card .dc-unit{font-size:12px;color:var(--muted-foreground)}
+
+/* ── GPS MAP ─────────────────────────────────────────────────────────── */
+.map-section{border-radius:var(--radius);padding:14px;margin-bottom:20px}
+.map-hdr{display:flex;justify-content:space-between;align-items:center;margin-bottom:10px}
+.map-title{font-size:11px;font-weight:600;letter-spacing:.15em;text-transform:uppercase;color:var(--muted-foreground)}
+.map-coords{font-family:'JetBrains Mono',monospace;font-size:9px;color:var(--muted-foreground)}
+#map{height:240px;border-radius:8px;border:1px solid var(--card-border)}
+
+/* ── PID SELECTOR ────────────────────────────────────────────── */
+.pid-selector{display:grid;grid-template-columns:repeat(2,1fr);gap:8px}
+@media(min-width:640px){.pid-selector{grid-template-columns:repeat(4,1fr)}}
+.pid-toggle{
+  display:flex;align-items:center;gap:8px;
+  padding:10px 12px;border-radius:10px;border:1px solid var(--card-border);
+  background:var(--secondary);color:var(--muted-foreground);
+  cursor:pointer;font-size:15px;font-weight:500;font-family:'Inter',sans-serif;
+  text-align:left;transition:border-color .2s,color .2s,background .2s;
+}
+.pid-toggle:hover{border-color:var(--primary);color:var(--foreground);background:hsla(213,85%,47%,.05)}
+.pid-toggle.active{background:hsla(213,85%,47%,.12);border-color:var(--primary);color:var(--primary)}
+.pid-toggle .pt-check{
+  width:16px;height:16px;border-radius:50%;border:1px solid var(--card-border);
+  flex-shrink:0;display:flex;align-items:center;justify-content:center;
+  font-size:9px;transition:background .2s,border-color .2s,color .2s;
+}
+.pid-toggle.active .pt-check{background:var(--primary);border-color:var(--primary);color:white}
+
+/* ── HISTORY TABLE ───────────────────────────────────────────── */
+.history-wrap{border-radius:var(--radius);overflow:hidden}
+.history-scroll{max-height:380px;overflow-y:auto}
+.history-table{width:100%;border-collapse:collapse}
+.history-table thead th{
+  padding:9px 10px;text-align:left;
+  font-size:9px;font-weight:600;letter-spacing:.12em;text-transform:uppercase;
+  color:var(--muted-foreground);border-bottom:1px solid var(--card-border);
+  position:sticky;top:0;background:var(--history-th-bg);white-space:nowrap;
+}
+.history-table tbody tr{border-bottom:1px solid var(--row-divider-soft);transition:background .15s}
+.history-table tbody tr:hover{background:var(--card-bg-hover)}
+.history-table tbody td{padding:7px 10px;font-family:'JetBrains Mono',monospace;font-size:11px;color:var(--foreground)}
+.history-table tbody td.warn{color:var(--bmw-orange)}
+.history-table tbody td.danger{color:var(--bmw-red)}
+.history-empty{text-align:center;padding:28px;color:var(--muted-foreground);font-size:11px}

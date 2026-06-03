@@ -1,0 +1,1689 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<script>
+// ═══ AUTH GUARD — must be the first script on the page ═══
+(function() {
+  const SESSION_KEY = 'vc_diag_session';
+  const raw = sessionStorage.getItem(SESSION_KEY) || localStorage.getItem(SESSION_KEY);
+  let valid = false;
+  if (raw) {
+    try {
+      const s = JSON.parse(raw);
+      const maxAge = 8 * 60 * 60 * 1000; // 8 hours
+      if (s.token && (Date.now() - s.loginAt < maxAge)) valid = true;
+    } catch(e) {}
+  }
+  if (!valid) {
+    sessionStorage.setItem('vc_return_to', location.pathname + location.search);
+    location.replace('login.html');
+  }
+})();
+</script>
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>CAN Diagnostics — Vehicle Dashboard</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600;700&family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="style.css">
+<style>
+/* ═══ DIAG-SPECIFIC ═══════════════════════════════════════════════════ */
+
+/* Tabs */
+.diag-tabs{
+  display:flex;gap:6px;margin-bottom:18px;
+  border-bottom:1px solid var(--border);
+  overflow-x:auto;scrollbar-width:none;
+}
+.diag-tabs::-webkit-scrollbar{display:none}
+.diag-tab{
+  font-family:'JetBrains Mono',monospace;
+  font-size:10px;font-weight:600;letter-spacing:.12em;text-transform:uppercase;
+  padding:10px 14px;background:none;border:none;
+  color:var(--muted-foreground);cursor:pointer;
+  border-bottom:2px solid transparent;
+  transition:all .2s;white-space:nowrap;
+  display:flex;align-items:center;gap:6px;
+}
+.diag-tab:hover{color:var(--foreground)}
+.diag-tab.active{color:var(--primary);border-bottom-color:var(--primary)}
+.diag-tab .tab-dot{
+  width:5px;height:5px;border-radius:50%;
+  background:var(--muted-foreground);
+}
+.diag-tab.active .tab-dot{background:var(--primary);box-shadow:0 0 6px var(--primary)}
+
+/* Tab panels */
+.diag-panel{display:none}
+.diag-panel.active{display:block}
+
+/* Section */
+.diag-section{
+  background:hsla(220,18%,14%,.8);
+  border:1px solid var(--border);
+  border-radius:var(--radius);
+  padding:14px;
+  margin-bottom:14px;
+  backdrop-filter:blur(12px);
+}
+.diag-section-hdr{
+  display:flex;align-items:center;justify-content:space-between;
+  margin-bottom:12px;padding-bottom:10px;
+  border-bottom:1px solid var(--border);
+}
+.diag-section-title{
+  font-family:'JetBrains Mono',monospace;
+  font-size:10px;font-weight:600;letter-spacing:.18em;text-transform:uppercase;
+  color:var(--muted-foreground);
+  display:flex;align-items:center;gap:8px;
+}
+.diag-section-title .dot{
+  width:6px;height:6px;border-radius:50%;
+  background:var(--primary);box-shadow:0 0 8px var(--primary);
+}
+
+/* Layouts */
+.diag-grid-2{display:grid;grid-template-columns:1fr;gap:14px}
+@media(min-width:960px){.diag-grid-2{grid-template-columns:1.1fr 1fr}}
+
+/* Form fields */
+.fld-row{display:grid;grid-template-columns:repeat(2,1fr);gap:10px;margin-bottom:10px}
+.fld-row.cols-3{grid-template-columns:repeat(3,1fr)}
+.fld-row.cols-4{grid-template-columns:repeat(2,1fr)}
+@media(min-width:640px){.fld-row.cols-4{grid-template-columns:repeat(4,1fr)}}
+.fld{display:flex;flex-direction:column;gap:4px}
+.fld-lbl{
+  font-family:'JetBrains Mono',monospace;
+  font-size:9px;letter-spacing:.15em;text-transform:uppercase;
+  color:var(--muted-foreground);
+}
+.fld-input, .fld-select{
+  font-family:'JetBrains Mono',monospace;
+  font-size:13px;font-weight:600;
+  background:var(--background);color:var(--foreground);
+  border:1px solid var(--border);border-radius:6px;
+  padding:8px 10px;outline:none;
+  transition:border-color .15s, box-shadow .15s;
+  width:100%;
+}
+.fld-input:focus, .fld-select:focus{
+  border-color:var(--primary);
+  box-shadow:0 0 0 3px hsla(213,85%,47%,.12);
+}
+.fld-input.mono{letter-spacing:.08em;text-transform:uppercase}
+.fld-hint{font-family:'JetBrains Mono',monospace;font-size:9px;color:hsla(215,15%,50%,.6)}
+
+/* Byte matrix */
+.byte-matrix{
+  display:grid;grid-template-columns:repeat(8,1fr);
+  gap:6px;margin-top:6px;
+}
+.byte-cell{display:flex;flex-direction:column;gap:3px}
+.byte-cell .bc-idx{
+  font-family:'JetBrains Mono',monospace;
+  font-size:8px;letter-spacing:.1em;
+  color:hsla(215,15%,50%,.5);text-align:center;
+}
+.byte-cell input{
+  width:100%;text-align:center;
+  font-family:'JetBrains Mono',monospace;font-size:12px;font-weight:700;
+  background:var(--background);color:var(--foreground);
+  border:1px solid var(--border);border-radius:5px;
+  padding:6px 2px;text-transform:uppercase;outline:none;
+  transition:border-color .15s, box-shadow .15s;
+}
+.byte-cell input:focus{
+  border-color:var(--primary);
+  box-shadow:0 0 0 2px hsla(213,85%,47%,.15);
+}
+.byte-cell input.disabled{
+  opacity:.3;pointer-events:none;
+}
+
+/* Bit view */
+.bit-strip{
+  display:flex;flex-direction:column;gap:6px;
+  font-family:'JetBrains Mono',monospace;
+}
+.bit-row{
+  display:grid;
+  grid-template-columns:32px repeat(8,1fr) 46px;
+  gap:3px;align-items:center;font-size:10px;
+}
+.bit-row .br-lbl{color:var(--muted-foreground);font-size:9px}
+.bit{
+  aspect-ratio:1;display:flex;align-items:center;justify-content:center;
+  border:1px solid var(--border);border-radius:3px;
+  background:var(--background);color:var(--muted-foreground);
+  font-size:10px;font-weight:700;cursor:pointer;user-select:none;
+  transition:all .12s;
+}
+.bit:hover{border-color:var(--primary)}
+.bit.on{
+  background:hsla(213,85%,47%,.18);
+  border-color:var(--primary);
+  color:var(--primary);
+  box-shadow:0 0 6px hsla(213,85%,47%,.3);
+}
+.bit-row .br-hex{
+  font-size:10px;color:var(--primary);text-align:right;
+  letter-spacing:.06em;
+}
+
+/* Buttons */
+.btn-row{display:flex;flex-wrap:wrap;gap:8px;margin-top:12px}
+.btn{
+  font-family:'JetBrains Mono',monospace;
+  font-size:10px;font-weight:600;letter-spacing:.12em;text-transform:uppercase;
+  padding:9px 14px;border-radius:6px;border:1px solid var(--border);
+  background:var(--secondary);color:var(--foreground);
+  cursor:pointer;transition:all .2s;
+  display:inline-flex;align-items:center;gap:6px;
+}
+.btn:hover{border-color:var(--primary);background:hsla(213,85%,47%,.08)}
+.btn.primary{background:hsla(213,85%,47%,.15);border-color:var(--primary);color:var(--primary)}
+.btn.primary:hover{background:hsla(213,85%,47%,.25)}
+.btn.danger{background:hsla(0,85%,55%,.12);border-color:hsla(0,85%,55%,.4);color:var(--bmw-red)}
+.btn.danger:hover{background:hsla(0,85%,55%,.22)}
+.btn.ghost{background:transparent}
+.btn svg{width:12px;height:12px;stroke:currentColor;fill:none;stroke-width:2.2;stroke-linecap:round;stroke-linejoin:round}
+
+/* Monitor / serial log */
+.mon-toolbar{
+  display:flex;flex-wrap:wrap;gap:8px;align-items:center;
+  padding-bottom:10px;margin-bottom:10px;
+  border-bottom:1px solid var(--border);
+}
+.mon-toolbar .spacer{flex:1}
+.mon-stat{
+  font-family:'JetBrains Mono',monospace;font-size:10px;
+  color:var(--muted-foreground);
+  display:flex;align-items:center;gap:6px;
+}
+.mon-stat .md{width:6px;height:6px;border-radius:50%;background:var(--status-ok);box-shadow:0 0 6px var(--status-ok)}
+.mon-stat .md.off{background:var(--muted-foreground);box-shadow:none}
+.mon-stat .md.live{animation:pulse 1.2s infinite}
+
+.mon-filters{display:flex;gap:6px;flex-wrap:wrap;margin-bottom:10px}
+.mon-filters input{
+  font-family:'JetBrains Mono',monospace;font-size:11px;
+  padding:5px 9px;border-radius:5px;border:1px solid var(--border);
+  background:var(--background);color:var(--foreground);outline:none;
+}
+.mon-filters input:focus{border-color:var(--primary)}
+
+.mon-log{
+  font-family:'JetBrains Mono',monospace;font-size:11px;line-height:1.55;
+  background:#07090c;border:1px solid var(--border);border-radius:8px;
+  padding:10px 12px;height:380px;overflow-y:auto;
+  color:#cfd4dc;
+}
+.mon-log::-webkit-scrollbar{width:6px}
+.mon-log::-webkit-scrollbar-track{background:transparent}
+.mon-log::-webkit-scrollbar-thumb{background:var(--border);border-radius:3px}
+
+.log-line{display:grid;grid-template-columns:72px 48px 60px 22px 1fr;gap:8px;white-space:nowrap}
+.log-line .lg-ts{color:hsla(215,15%,50%,.65)}
+.log-line .lg-dir{font-weight:700}
+.log-line .lg-dir.rx{color:var(--status-ok)}
+.log-line .lg-dir.tx{color:var(--primary)}
+.log-line .lg-dir.sys{color:var(--muted-foreground)}
+.log-line .lg-dir.err{color:var(--bmw-red)}
+.log-line .lg-id{color:var(--bmw-orange);font-weight:600}
+.log-line .lg-dlc{color:hsla(215,15%,50%,.7)}
+.log-line .lg-data{color:#cfd4dc;overflow:hidden;text-overflow:ellipsis}
+
+/* Checkbox pill */
+.chk-row{display:flex;flex-wrap:wrap;gap:6px}
+.chk{
+  display:inline-flex;align-items:center;gap:6px;
+  font-family:'JetBrains Mono',monospace;font-size:10px;
+  letter-spacing:.1em;text-transform:uppercase;
+  padding:6px 10px;border-radius:6px;border:1px solid var(--border);
+  background:var(--secondary);color:var(--muted-foreground);
+  cursor:pointer;user-select:none;transition:all .15s;
+}
+.chk:hover{color:var(--foreground);border-color:var(--primary)}
+.chk.on{background:hsla(213,85%,47%,.14);border-color:var(--primary);color:var(--primary)}
+.chk input{display:none}
+
+/* Presets */
+.preset-list{display:flex;flex-direction:column;gap:6px;max-height:420px;overflow-y:auto;padding-right:4px}
+.preset-list::-webkit-scrollbar{width:6px}
+.preset-list::-webkit-scrollbar-track{background:transparent}
+.preset-list::-webkit-scrollbar-thumb{background:var(--border);border-radius:3px}
+.preset{
+  display:grid;grid-template-columns:1fr auto;gap:10px;align-items:center;
+  padding:10px 12px;border-radius:8px;
+  background:var(--background);border:1px solid var(--border);
+  transition:border-color .15s;cursor:pointer;
+}
+.preset:hover{border-color:var(--primary)}
+.preset .p-body{min-width:0}
+.preset .p-name{font-size:12px;font-weight:600;color:var(--foreground);margin-bottom:3px}
+.preset .p-frame{font-family:'JetBrains Mono',monospace;font-size:10px;color:var(--muted-foreground);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.preset .p-cat{
+  font-family:'JetBrains Mono',monospace;font-size:8px;letter-spacing:.12em;
+  color:var(--primary);margin-top:2px;
+}
+.preset-actions{display:flex;gap:4px;flex-shrink:0}
+.pa-btn{
+  width:28px;height:28px;border-radius:6px;
+  border:1px solid var(--border);background:var(--secondary);
+  display:flex;align-items:center;justify-content:center;cursor:pointer;
+  color:var(--muted-foreground);transition:all .15s;
+}
+.pa-btn:hover{border-color:var(--primary);color:var(--primary)}
+.pa-btn svg{width:12px;height:12px;stroke:currentColor;fill:none;stroke-width:2;stroke-linecap:round;stroke-linejoin:round}
+
+/* UDS quick buttons */
+.uds-grid{display:grid;grid-template-columns:repeat(2,1fr);gap:8px}
+@media(min-width:640px){.uds-grid{grid-template-columns:repeat(4,1fr)}}
+.uds-btn{
+  padding:10px;border-radius:8px;border:1px solid var(--border);
+  background:var(--secondary);color:var(--foreground);cursor:pointer;
+  text-align:left;font-family:'Inter',sans-serif;
+  transition:all .15s;
+}
+.uds-btn:hover{border-color:var(--primary);background:hsla(213,85%,47%,.05)}
+.uds-btn .ub-sid{
+  font-family:'JetBrains Mono',monospace;font-size:13px;font-weight:700;
+  color:var(--primary);
+}
+.uds-btn .ub-name{font-size:10px;color:var(--muted-foreground);margin-top:3px}
+
+/* Status badge */
+.status-chip{
+  display:inline-flex;align-items:center;gap:6px;
+  font-family:'JetBrains Mono',monospace;
+  font-size:9px;letter-spacing:.12em;text-transform:uppercase;
+  padding:4px 10px;border-radius:20px;
+  border:1px solid var(--border);background:var(--secondary);
+  color:var(--muted-foreground);
+}
+.status-chip.ok{color:var(--status-ok);border-color:hsla(142,70%,45%,.4);background:hsla(142,70%,45%,.08)}
+.status-chip.warn{color:var(--bmw-orange);border-color:hsla(25,100%,55%,.4);background:hsla(25,100%,55%,.08)}
+.status-chip.err{color:var(--bmw-red);border-color:hsla(0,85%,55%,.4);background:hsla(0,85%,55%,.08)}
+
+/* Loop card */
+.loop-active{
+  display:flex;align-items:center;justify-content:space-between;
+  padding:8px 12px;background:hsla(213,85%,47%,.08);
+  border:1px solid hsla(213,85%,47%,.3);border-radius:8px;
+  margin-bottom:8px;font-size:11px;
+}
+.loop-active .la-info{font-family:'JetBrains Mono',monospace;color:var(--foreground)}
+.loop-active .la-rate{color:var(--muted-foreground);font-size:10px;margin-left:8px}
+
+.empty{text-align:center;padding:22px;color:var(--muted-foreground);font-size:11px}
+.empty-sm{padding:14px;font-size:10px}
+
+/* Baud selector */
+.baud-selector{
+  display:inline-flex;align-items:center;gap:8px;
+  padding:4px 6px 4px 12px;border-radius:20px;
+  border:1px solid var(--border);background:var(--secondary);
+  font-family:'JetBrains Mono',monospace;
+}
+.baud-selector .baud-prefix{
+  font-size:13px;letter-spacing:.15em;text-transform:uppercase;
+  color:var(--primary);
+}
+.baud-selector select{
+  font-family:'JetBrains Mono',monospace;
+  font-size:10px;font-weight:600;letter-spacing:.05em;
+  background:transparent;color:var(--primary);
+  border:none;padding:4px 6px;outline:none;cursor:pointer;
+  border-radius:14px;
+}
+.baud-selector select:focus{
+  background:hsla(213,85%,47%,.08);
+}
+.baud-selector select option{
+  background:var(--background-2);color:var(--foreground);
+}
+</style>
+</head>
+<body>
+
+<div class="page active" id="page-diagnostics">
+
+  <!-- Header -->
+  <div class="page-header">
+    <a class="back-btn" href="dashboard.html" title="Back">
+      <svg viewBox="0 0 24 24"><polyline points="15 18 9 12 15 6"/></svg>
+    </a>
+    <div>
+      <div class="page-title">Diagnostics</div>
+      <div class="page-subtitle">CAN · UDS · Coding</div>
+    </div>
+    <div style="margin-left:auto;display:flex;gap:8px;align-items:center;flex-wrap:wrap">
+      <div class="baud-selector">
+        <span class="baud-prefix">CAN baud rate:</span>
+        <select id="busBaud" onchange="onBaudChange()">
+          <option value="125000">125 kbit/s</option>
+          <option value="250000" selected>250 kbit/s</option>
+          <option value="500000">500 kbit/s</option>
+          <option value="1000000">1 Mbit/s</option>
+          <option value="2000000">2 Mbit/s (FD)</option>
+          <option value="4000000">4 Mbit/s (FD)</option>
+          <option value="5000000">5 Mbit/s (FD)</option>
+          <option value="custom">Custom…</option>
+        </select>
+      </div>
+      <input type="number" id="busBaudCustom" class="fld-input mono"
+             style="display:none;width:110px;padding:6px 8px;font-size:11px"
+             placeholder="bit/s" min="5000" max="8000000">
+    </div>
+    <button onclick="logout()" style="padding:5px 10px;border-radius:6px;border:1px solid var(--border);background:var(--secondary);color:var(--logout-color);cursor:pointer;font-family:'JetBrains Mono',monospace;font-size:10px;text-transform:uppercase">
+  Log out
+</button>
+  </div>
+
+  <!-- Tabs -->
+  <div class="diag-tabs">
+    <button class="diag-tab active" data-tab="builder">
+      <span class="tab-dot"></span> Frame builder
+    </button>
+    <button class="diag-tab" data-tab="monitor">
+      <span class="tab-dot"></span> Live monitor
+    </button>
+    <button class="diag-tab" data-tab="uds">
+      <span class="tab-dot"></span> UDS / Coding
+    </button>
+    <button class="diag-tab" data-tab="presets">
+      <span class="tab-dot"></span> Library
+    </button>
+    <button class="diag-tab" data-tab="serial">
+      <span class="tab-dot"></span> Serial
+    </button>
+  </div>
+
+  <!-- ═══════════════════════════════════════════════════════════════════ -->
+  <!-- TAB 1: FRAME BUILDER                                               -->
+  <!-- ═══════════════════════════════════════════════════════════════════ -->
+  <div class="diag-panel active" id="panel-builder">
+    <div class="diag-grid-2">
+
+      <!-- LEFT: builder -->
+      <div>
+        <div class="diag-section">
+          <div class="diag-section-hdr">
+            <div class="diag-section-title"><span class="dot"></span>Frame Construction</div>
+            <span class="status-chip" id="frameFormat">CAN 2.0 · STD</span>
+          </div>
+
+          <!-- ID / DLC / flags -->
+          <div class="fld-row cols-3">
+            <div class="fld">
+              <label class="fld-lbl">CAN ID (hex)</label>
+              <input type="text" class="fld-input mono" id="fbId" value="7DF" maxlength="8" placeholder="7DF">
+              <span class="fld-hint" id="fbIdHint">std · 11 bit</span>
+            </div>
+            <div class="fld">
+              <label class="fld-lbl">DLC (length)</label>
+              <select class="fld-select" id="fbDlc">
+                <option value="0">0</option><option value="1">1</option>
+                <option value="2">2</option><option value="3">3</option>
+                <option value="4">4</option><option value="5">5</option>
+                <option value="6">6</option><option value="7">7</option>
+                <option value="8" selected>8</option>
+              </select>
+              <span class="fld-hint">byte count</span>
+            </div>
+            <div class="fld">
+              <label class="fld-lbl">Format</label>
+              <select class="fld-select" id="fbFormat">
+                <option value="std">Standard (11b)</option>
+                <option value="ext">Extended (29b)</option>
+              </select>
+              <span class="fld-hint">ID length</span>
+            </div>
+          </div>
+
+          <div class="chk-row" style="margin-top:6px">
+            <label class="chk" id="chkRtrLbl">
+              <input type="checkbox" id="chkRtr"> RTR (remote)
+            </label>
+            <label class="chk" id="chkFdLbl">
+              <input type="checkbox" id="chkFd"> CAN FD
+            </label>
+            <label class="chk on" id="chkBrsLbl">
+              <input type="checkbox" id="chkBrs" checked> BRS (bitrate switch)
+            </label>
+          </div>
+
+          <!-- Data bytes -->
+          <div style="margin-top:14px">
+            <label class="fld-lbl" style="display:block;margin-bottom:6px">Data payload (hex)</label>
+            <div class="byte-matrix" id="byteMatrix">
+              <!-- generated by JS -->
+            </div>
+          </div>
+
+          <!-- Raw view -->
+          <div style="margin-top:14px">
+            <label class="fld-lbl" style="display:block;margin-bottom:6px">Raw frame</label>
+            <div style="background:#07090c;border:1px solid var(--border);border-radius:6px;padding:10px 12px;font-family:'JetBrains Mono',monospace;font-size:12px;color:var(--foreground);overflow-x:auto">
+              <span style="color:var(--bmw-orange)" id="rawId">7DF</span>
+              <span style="color:var(--muted-foreground)"> # </span>
+              <span style="color:var(--muted-foreground)">[</span><span id="rawDlc">8</span><span style="color:var(--muted-foreground)">]</span>
+              <span style="color:var(--muted-foreground)"> · </span>
+              <span id="rawBytes">00 00 00 00 00 00 00 00</span>
+            </div>
+          </div>
+
+          <div class="btn-row">
+            <button class="btn primary" onclick="sendFrame()">
+              <svg viewBox="0 0 24 24"><polygon points="5 3 19 12 5 21 5 3"/></svg>
+              Send
+            </button>
+            <button class="btn" onclick="openLoop()">
+              <svg viewBox="0 0 24 24"><polyline points="23 4 23 10 17 10"/><polyline points="1 20 1 14 7 14"/><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10"/><path d="M20.49 15a9 9 0 0 1-14.85 3.36L1 14"/></svg>
+              Loop
+            </button>
+            <button class="btn" onclick="savePreset()">
+              <svg viewBox="0 0 24 24"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/><polyline points="17 21 17 13 7 13 7 21"/><polyline points="7 3 7 8 15 8"/></svg>
+              Save
+            </button>
+            <button class="btn ghost" onclick="clearFrame()">
+              <svg viewBox="0 0 24 24"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-2 14a2 2 0 0 1-2 2H9a2 2 0 0 1-2-2L5 6"/></svg>
+              Clear
+            </button>
+          </div>
+        </div>
+
+        <!-- Loop config (hidden by default) -->
+        <div class="diag-section" id="loopCard" style="display:none">
+          <div class="diag-section-hdr">
+            <div class="diag-section-title"><span class="dot"></span>Periodic Sending</div>
+          </div>
+          <div class="fld-row cols-3">
+            <div class="fld">
+              <label class="fld-lbl">Interval (ms)</label>
+              <input type="number" class="fld-input" id="loopInterval" value="100" min="10" max="60000">
+            </div>
+            <div class="fld">
+              <label class="fld-lbl">Repetition count</label>
+              <input type="number" class="fld-input" id="loopCount" value="0" min="0">
+              <span class="fld-hint">0 = infinite</span>
+            </div>
+            <div class="fld">
+              <label class="fld-lbl">Trigger</label>
+              <select class="fld-select" id="loopTrigger">
+                <option value="time">Timer</option>
+                <option value="response">On response</option>
+                <option value="manual">Manual</option>
+              </select>
+            </div>
+          </div>
+          <div class="btn-row">
+            <button class="btn primary" onclick="startLoop()">
+              <svg viewBox="0 0 24 24"><polygon points="5 3 19 12 5 21 5 3"/></svg>
+              Start loop
+            </button>
+            <button class="btn" onclick="stopLoop()">
+              <svg viewBox="0 0 24 24"><rect x="6" y="6" width="12" height="12"/></svg>
+              Stop
+            </button>
+          </div>
+          <div id="activeLoops" style="margin-top:10px"></div>
+        </div>
+      </div>
+
+      <!-- RIGHT: bit decoder -->
+      <div>
+        <div class="diag-section">
+          <div class="diag-section-hdr">
+            <div class="diag-section-title"><span class="dot"></span>Bit Matrix</div>
+            <span class="status-chip" id="bitCount">64 bit</span>
+          </div>
+
+          <div class="bit-strip" id="bitStrip">
+            <!-- generated by JS -->
+          </div>
+
+          <!-- Signal extractor -->
+          <div style="margin-top:16px;padding-top:14px;border-top:1px solid var(--border)">
+            <label class="fld-lbl" style="display:block;margin-bottom:8px">Signal Extraction</label>
+            <div class="fld-row cols-4">
+              <div class="fld">
+                <label class="fld-lbl">Start bit</label>
+                <input type="number" class="fld-input" id="sigStart" value="0" min="0" max="63">
+              </div>
+              <div class="fld">
+                <label class="fld-lbl">Length (bits)</label>
+                <input type="number" class="fld-input" id="sigLen" value="8" min="1" max="64">
+              </div>
+              <div class="fld">
+                <label class="fld-lbl">Byte order</label>
+                <select class="fld-select" id="sigOrder">
+                  <option value="le">Intel (LE)</option>
+                  <option value="be">Motorola (BE)</option>
+                </select>
+              </div>
+              <div class="fld">
+                <label class="fld-lbl">Type</label>
+                <select class="fld-select" id="sigType">
+                  <option value="u">Unsigned</option>
+                  <option value="s">Signed</option>
+                </select>
+              </div>
+            </div>
+            <div class="fld-row cols-3">
+              <div class="fld">
+                <label class="fld-lbl">Factor</label>
+                <input type="number" class="fld-input" id="sigFactor" value="1" step="any">
+              </div>
+              <div class="fld">
+                <label class="fld-lbl">Offset</label>
+                <input type="number" class="fld-input" id="sigOffset" value="0" step="any">
+              </div>
+              <div class="fld">
+                <label class="fld-lbl">Unit</label>
+                <input type="text" class="fld-input" id="sigUnit" placeholder="e.g. °C">
+              </div>
+            </div>
+            <div style="margin-top:12px;padding:12px;background:var(--background);border:1px solid var(--border);border-radius:8px;display:flex;justify-content:space-between;align-items:center">
+              <div>
+                <div class="fld-lbl" style="margin-bottom:4px">Physical Value</div>
+                <div style="font-family:'JetBrains Mono',monospace;font-size:22px;font-weight:700;color:var(--primary);text-shadow:0 0 15px var(--primary-glow)">
+                  <span id="sigPhys">0</span>
+                  <span style="font-size:12px;color:var(--muted-foreground)" id="sigPhysUnit"></span>
+                </div>
+              </div>
+              <div style="text-align:right">
+                <div class="fld-lbl" style="margin-bottom:4px">Raw</div>
+                <div style="font-family:'JetBrains Mono',monospace;font-size:13px;color:var(--foreground)">
+                  <div id="sigRawDec">0</div>
+                  <div style="color:var(--muted-foreground);font-size:10px" id="sigRawHex">0x00</div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+    </div>
+  </div>
+
+  <!-- ═══════════════════════════════════════════════════════════════════ -->
+  <!-- TAB 2: LIVE MONITOR                                               -->
+  <!-- ═══════════════════════════════════════════════════════════════════ -->
+  <div class="diag-panel" id="panel-monitor">
+    <div class="diag-section">
+      <div class="mon-toolbar">
+        <button class="btn primary" id="btnMonToggle" onclick="toggleMonitor()">
+          <svg viewBox="0 0 24 24"><polygon points="5 3 19 12 5 21 5 3"/></svg>
+          Start
+        </button>
+        <button class="btn" onclick="clearMonitor()">
+          <svg viewBox="0 0 24 24"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-2 14a2 2 0 0 1-2 2H9a2 2 0 0 1-2-2L5 6"/></svg>
+          Clear
+        </button>
+        <button class="btn" onclick="exportMonitor()">
+          <svg viewBox="0 0 24 24"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+          Export CSV
+        </button>
+        <label class="chk on" id="autoScrollLbl">
+          <input type="checkbox" id="autoScroll" checked> Auto-scroll
+        </label>
+        <label class="chk" id="pauseOnRxLbl">
+          <input type="checkbox" id="pauseOnRx"> Pause on error
+        </label>
+        <div class="spacer"></div>
+        <div class="mon-stat"><span class="md off" id="monLiveDot"></span> <span id="monCount">0</span> frames</div>
+        <div class="mon-stat"><span id="monRate">0</span> f/s</div>
+      </div>
+
+      <div class="mon-filters">
+        <input type="text" id="filterId" placeholder="CAN ID Filter (hex, comma separated)">
+        <input type="text" id="filterMask" placeholder="Mask (e.g. 7FF)">
+        <input type="text" id="filterData" placeholder="Search in data bytes">
+      </div>
+
+      <div class="mon-log" id="monLog">
+        <div class="log-line">
+          <span class="lg-ts">--:--:--.---</span>
+          <span class="lg-dir sys">---</span>
+          <span class="lg-id">----</span>
+          <span class="lg-dlc">-</span>
+          <span class="lg-data" style="color:var(--muted-foreground)">Monitor not running. Click Start for live bus monitoring.</span>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ═══════════════════════════════════════════════════════════════════ -->
+  <!-- TAB 3: UDS / CODING                                               -->
+  <!-- ═══════════════════════════════════════════════════════════════════ -->
+  <div class="diag-panel" id="panel-uds">
+    <div class="diag-grid-2">
+
+      <!-- LEFT: UDS request builder -->
+      <div>
+        <div class="diag-section">
+          <div class="diag-section-hdr">
+            <div class="diag-section-title"><span class="dot"></span>UDS · ISO-TP Request</div>
+            <span class="status-chip" id="udsSession">DefaultSession</span>
+          </div>
+
+          <div class="fld-row cols-3">
+            <div class="fld">
+              <label class="fld-lbl">ECU · Request ID</label>
+              <input type="text" class="fld-input mono" id="udsReqId" value="714" maxlength="4">
+              <span class="fld-hint">e.g. 714 = Comfort</span>
+            </div>
+            <div class="fld">
+              <label class="fld-lbl">ECU · Response ID</label>
+              <input type="text" class="fld-input mono" id="udsResId" value="77E" maxlength="4">
+              <span class="fld-hint">usually req + 0x6A</span>
+            </div>
+            <div class="fld">
+              <label class="fld-lbl">Addressing</label>
+              <select class="fld-select" id="udsAddr">
+                <option value="phys">Physical</option>
+                <option value="func">Functional (7DF)</option>
+              </select>
+            </div>
+          </div>
+
+          <div class="fld-row">
+            <div class="fld">
+              <label class="fld-lbl">Service (SID)</label>
+              <select class="fld-select" id="udsSid" onchange="onUdsSidChange()">
+                <option value="10">10 — DiagnosticSessionControl</option>
+                <option value="11">11 — ECUReset</option>
+                <option value="22" selected>22 — ReadDataByIdentifier</option>
+                <option value="27">27 — SecurityAccess</option>
+                <option value="28">28 — CommunicationControl</option>
+                <option value="2E">2E — WriteDataByIdentifier</option>
+                <option value="31">31 — RoutineControl</option>
+                <option value="3E">3E — TesterPresent</option>
+                <option value="85">85 — ControlDTCSetting</option>
+              </select>
+            </div>
+            <div class="fld">
+              <label class="fld-lbl">Sub-function / DID</label>
+              <input type="text" class="fld-input mono" id="udsSub" value="F190" maxlength="4">
+              <span class="fld-hint" id="udsSubHint">DID = Data Identifier (2B)</span>
+            </div>
+          </div>
+
+          <div class="fld">
+            <label class="fld-lbl">Additional Data (hex, optional)</label>
+            <input type="text" class="fld-input mono" id="udsExtra" placeholder="e.g. 01 02 03">
+            <span class="fld-hint">For 2E write: value to write. For 27: seed/key.</span>
+          </div>
+
+          <div class="btn-row">
+            <button class="btn primary" onclick="sendUds()">
+              <svg viewBox="0 0 24 24"><polygon points="5 3 19 12 5 21 5 3"/></svg>
+              Send request
+            </button>
+            <button class="btn" onclick="udsTesterPresent()">
+              <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+              TesterPresent
+            </button>
+            <button class="btn danger" onclick="udsReset()">
+              <svg viewBox="0 0 24 24"><path d="M1 4v6h6"/><path d="M3.51 15a9 9 0 1 0 2.13-9.36L1 10"/></svg>
+              ECU Reset
+            </button>
+          </div>
+        </div>
+
+        <!-- Rychlé session přepínače -->
+        <div class="diag-section">
+          <div class="diag-section-hdr">
+            <div class="diag-section-title"><span class="dot"></span>Diagnostic Session</div>
+          </div>
+          <div class="uds-grid">
+            <button class="uds-btn" onclick="setSession('01')">
+              <div class="ub-sid">10 01</div>
+              <div class="ub-name">Default</div>
+            </button>
+            <button class="uds-btn" onclick="setSession('02')">
+              <div class="ub-sid">10 02</div>
+              <div class="ub-name">Programming</div>
+            </button>
+            <button class="uds-btn" onclick="setSession('03')">
+              <div class="ub-sid">10 03</div>
+              <div class="ub-name">Extended</div>
+            </button>
+            <button class="uds-btn" onclick="setSession('60')">
+              <div class="ub-sid">10 60</div>
+              <div class="ub-name">Coding (VAG)</div>
+            </button>
+          </div>
+        </div>
+      </div>
+
+      <!-- RIGHT: UDS response + DTC -->
+      <div>
+        <div class="diag-section">
+          <div class="diag-section-hdr">
+            <div class="diag-section-title"><span class="dot"></span>ECU Response</div>
+            <span class="status-chip ok" id="udsRespStatus">Waiting…</span>
+          </div>
+          <div style="background:#07090c;border:1px solid var(--border);border-radius:8px;padding:12px;font-family:'JetBrains Mono',monospace;font-size:11px;min-height:120px;color:#cfd4dc" id="udsResp">
+            <div style="color:var(--muted-foreground)">Send a request to see the ECU response…</div>
+          </div>
+          <div style="margin-top:10px;padding:10px;background:var(--background);border:1px solid var(--border);border-radius:6px">
+            <div class="fld-lbl" style="margin-bottom:4px">Decoded</div>
+            <div style="font-family:'JetBrains Mono',monospace;font-size:12px;color:var(--foreground)" id="udsDecoded">—</div>
+          </div>
+        </div>
+
+        <!-- DTC -->
+        <div class="diag-section">
+          <div class="diag-section-hdr">
+            <div class="diag-section-title"><span class="dot"></span>Diagnostic Trouble Codes (DTC)</div>
+            <div style="display:flex;gap:6px">
+              <button class="btn ghost" style="padding:5px 10px" onclick="readDtc()">Read</button>
+              <button class="btn danger" style="padding:5px 10px" onclick="clearDtc()">Clear</button>
+            </div>
+          </div>
+          <div id="dtcList">
+            <div class="empty empty-sm">No DTCs read. Click "Read".</div>
+          </div>
+        </div>
+      </div>
+
+    </div>
+  </div>
+
+  <!-- ═══════════════════════════════════════════════════════════════════ -->
+  <!-- TAB 4: PRESET LIBRARY                                              -->
+  <!-- ═══════════════════════════════════════════════════════════════════ -->
+  <div class="diag-panel" id="panel-presets">
+    <div class="diag-grid-2">
+      <div class="diag-section">
+        <div class="diag-section-hdr">
+          <div class="diag-section-title"><span class="dot"></span>My Saved Packets</div>
+          <button class="btn ghost" style="padding:5px 10px" onclick="clearAllPresets()">Clear all</button>
+        </div>
+        <div class="preset-list" id="userPresetList">
+          <div class="empty">No saved packets. Construct a frame in Frame Builder and click "Save".</div>
+        </div>
+      </div>
+
+      <div class="diag-section">
+        <div class="diag-section-hdr">
+          <div class="diag-section-title"><span class="dot"></span>Built-in Library</div>
+          <span class="status-chip" id="presetCount">0 items</span>
+        </div>
+        <div class="preset-list" id="builtinPresetList"></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ═══════════════════════════════════════════════════════════════════ -->
+  <!-- TAB 5: SERIAL MONITOR                                              -->
+  <!-- ═══════════════════════════════════════════════════════════════════ -->
+  <div class="diag-panel" id="panel-serial">
+    <div class="diag-section">
+      <div class="diag-section-hdr">
+        <div class="diag-section-title"><span class="dot"></span>ESP32 Serial Monitor</div>
+        <div style="display:flex;gap:6px;align-items:center">
+          <select class="fld-select" id="serialBaud" style="width:auto;padding:6px 8px;font-size:11px">
+            <option>9600</option><option>57600</option>
+            <option selected>115200</option><option>230400</option><option>921600</option>
+          </select>
+          <button class="btn primary" id="btnSerialToggle" onclick="toggleSerial()">Connect</button>
+        </div>
+      </div>
+
+      <div class="mon-toolbar">
+        <label class="chk on"><input type="checkbox" id="serialTs" checked> Timestamps</label>
+        <label class="chk"><input type="checkbox" id="serialHex"> Hex view</label>
+        <label class="chk on"><input type="checkbox" id="serialAutoScroll" checked> Auto-scroll</label>
+        <div class="spacer"></div>
+        <button class="btn ghost" onclick="clearSerial()">Clear</button>
+        <button class="btn ghost" onclick="exportSerial()">Save</button>
+      </div>
+
+      <div class="mon-log" id="serialLog" style="height:340px">
+        <div class="log-line">
+          <span class="lg-ts">--:--:--.---</span>
+          <span class="lg-dir sys">---</span>
+          <span class="lg-id"></span>
+          <span class="lg-dlc"></span>
+          <span class="lg-data" style="color:var(--muted-foreground)">Not connected. Click Connect to stream log from ESP32.</span>
+        </div>
+      </div>
+
+      <!-- TX input -->
+      <div style="margin-top:10px;display:grid;grid-template-columns:1fr auto;gap:6px">
+        <input type="text" class="fld-input mono" id="serialTxInput" placeholder="Send to ESP32 (Enter)" onkeydown="if(event.key==='Enter')serialSend()">
+        <button class="btn primary" onclick="serialSend()">
+          <svg viewBox="0 0 24 24"><line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/></svg>
+          TX
+        </button>
+      </div>
+    </div>
+  </div>
+
+</div>
+
+
+<script>
+// ═══════════════════════════════════════════════════════════════════════
+// STATE
+// ═══════════════════════════════════════════════════════════════════════
+const state = {
+  bytes: [0,0,0,0,0,0,0,0],
+  monitor: { running:false, frames:[], rateWindow:[], timer:null, simTimer:null },
+  serial: { connected:false, lines:[], timer:null },
+  loops: [],
+  presets: []
+};
+
+// ═══════════════════════════════════════════════════════════════════════
+// TAB SWITCHING
+// ═══════════════════════════════════════════════════════════════════════
+document.querySelectorAll('.diag-tab').forEach(tab => {
+  tab.addEventListener('click', () => {
+    document.querySelectorAll('.diag-tab').forEach(t => t.classList.remove('active'));
+    document.querySelectorAll('.diag-panel').forEach(p => p.classList.remove('active'));
+    tab.classList.add('active');
+    document.getElementById('panel-' + tab.dataset.tab).classList.add('active');
+  });
+});
+
+// ═══════════════════════════════════════════════════════════════════════
+// BYTE MATRIX
+// ═══════════════════════════════════════════════════════════════════════
+function initByteMatrix() {
+  const host = document.getElementById('byteMatrix');
+  host.innerHTML = '';
+  for (let i = 0; i < 8; i++) {
+    const cell = document.createElement('div');
+    cell.className = 'byte-cell';
+    cell.innerHTML = `
+      <div class="bc-idx">B${i}</div>
+      <input type="text" id="by${i}" value="00" maxlength="2" data-idx="${i}">
+    `;
+    host.appendChild(cell);
+  }
+  host.querySelectorAll('input').forEach(inp => {
+    inp.addEventListener('input', e => {
+      const v = e.target.value.replace(/[^0-9a-fA-F]/g, '').toUpperCase();
+      e.target.value = v;
+      const n = parseInt(v, 16);
+      state.bytes[+e.target.dataset.idx] = isNaN(n) ? 0 : n;
+      renderBits();
+      updateRawFrame();
+      updateSignal();
+    });
+    inp.addEventListener('blur', e => {
+      if (e.target.value.length < 2) e.target.value = e.target.value.padStart(2, '0');
+    });
+  });
+  updateDlcDisabled();
+}
+
+function updateDlcDisabled() {
+  const dlc = parseInt(document.getElementById('fbDlc').value);
+  for (let i = 0; i < 8; i++) {
+    const inp = document.getElementById('by' + i);
+    if (!inp) continue;
+    inp.classList.toggle('disabled', i >= dlc);
+  }
+}
+
+// ═══════════════════════════════════════════════════════════════════════
+// BIT MATRIX
+// ═══════════════════════════════════════════════════════════════════════
+function renderBits() {
+  const host = document.getElementById('bitStrip');
+  host.innerHTML = '';
+  for (let b = 0; b < 8; b++) {
+    const row = document.createElement('div');
+    row.className = 'bit-row';
+    let html = `<span class="br-lbl">B${b}</span>`;
+    // bit 7 → bit 0 (MSB left, standard)
+    for (let bit = 7; bit >= 0; bit--) {
+      const on = (state.bytes[b] >> bit) & 1;
+      html += `<div class="bit ${on ? 'on' : ''}" data-byte="${b}" data-bit="${bit}">${on}</div>`;
+    }
+    html += `<span class="br-hex">0x${state.bytes[b].toString(16).toUpperCase().padStart(2,'0')}</span>`;
+    row.innerHTML = html;
+    host.appendChild(row);
+  }
+  host.querySelectorAll('.bit').forEach(el => {
+    el.addEventListener('click', () => {
+      const b = +el.dataset.byte, bit = +el.dataset.bit;
+      state.bytes[b] ^= (1 << bit);
+      const inp = document.getElementById('by' + b);
+      if (inp) inp.value = state.bytes[b].toString(16).toUpperCase().padStart(2,'0');
+      renderBits();
+      updateRawFrame();
+      updateSignal();
+    });
+  });
+}
+
+// ═══════════════════════════════════════════════════════════════════════
+// RAW FRAME
+// ═══════════════════════════════════════════════════════════════════════
+function updateRawFrame() {
+  const id = document.getElementById('fbId').value.toUpperCase() || '000';
+  const dlc = parseInt(document.getElementById('fbDlc').value);
+  document.getElementById('rawId').textContent = id;
+  document.getElementById('rawDlc').textContent = dlc;
+  document.getElementById('rawBytes').textContent = state.bytes
+    .slice(0, dlc)
+    .map(b => b.toString(16).toUpperCase().padStart(2,'0'))
+    .join(' ') || '—';
+}
+
+// ═══════════════════════════════════════════════════════════════════════
+// SIGNAL EXTRACTION
+// ═══════════════════════════════════════════════════════════════════════
+function updateSignal() {
+  const start = +document.getElementById('sigStart').value;
+  const len = +document.getElementById('sigLen').value;
+  const order = document.getElementById('sigOrder').value;
+  const signed = document.getElementById('sigType').value === 's';
+  const factor = parseFloat(document.getElementById('sigFactor').value) || 1;
+  const offset = parseFloat(document.getElementById('sigOffset').value) || 0;
+  const unit = document.getElementById('sigUnit').value;
+
+  if (len < 1 || len > 64 || start < 0 || start + len > 64) {
+    document.getElementById('sigPhys').textContent = '—';
+    return;
+  }
+
+  // Build 64-bit BigInt (LE = byte 0 is LSB)
+  let full = 0n;
+  for (let i = 0; i < 8; i++) {
+    full |= BigInt(state.bytes[i]) << BigInt(i * 8);
+  }
+
+  let raw;
+  if (order === 'le') {
+    const mask = (1n << BigInt(len)) - 1n;
+    raw = (full >> BigInt(start)) & mask;
+  } else {
+    // Motorola (big-endian) — simplified
+    const byteStart = Math.floor(start / 8);
+    const bitInByte = start % 8;
+    const startMsb = byteStart * 8 + (7 - bitInByte);
+    let r = 0n;
+    for (let i = 0; i < len; i++) {
+      const bitPos = startMsb - i;
+      const byteI = Math.floor(bitPos / 8);
+      const bitI = bitPos % 8;
+      if (byteI >= 0 && byteI < 8) {
+        const v = (BigInt(state.bytes[byteI]) >> BigInt(bitI)) & 1n;
+        r = (r << 1n) | v;
+      }
+    }
+    raw = r;
+  }
+
+  let rawNum = Number(raw);
+  if (signed) {
+    const signBit = 1 << (len - 1);
+    if (rawNum & signBit) rawNum -= (1 << len);
+  }
+
+  const phys = rawNum * factor + offset;
+  document.getElementById('sigPhys').textContent = 
+    Number.isInteger(phys) ? phys : phys.toFixed(3);
+  document.getElementById('sigPhysUnit').textContent = unit;
+  document.getElementById('sigRawDec').textContent = rawNum;
+  document.getElementById('sigRawHex').textContent = 
+    '0x' + (rawNum >>> 0).toString(16).toUpperCase();
+}
+
+['sigStart','sigLen','sigOrder','sigType','sigFactor','sigOffset','sigUnit']
+  .forEach(id => document.getElementById(id).addEventListener('input', updateSignal));
+
+// ═══════════════════════════════════════════════════════════════════════
+// FORMAT / DLC / ID CHANGES
+// ═══════════════════════════════════════════════════════════════════════
+document.getElementById('fbId').addEventListener('input', e => {
+  e.target.value = e.target.value.replace(/[^0-9a-fA-F]/g, '').toUpperCase();
+  const n = parseInt(e.target.value, 16);
+  const isExt = document.getElementById('fbFormat').value === 'ext';
+  const max = isExt ? 0x1FFFFFFF : 0x7FF;
+  document.getElementById('fbIdHint').textContent =
+    !isNaN(n) ? (isExt ? `ext · ${n} dec · ${n <= max ? 'OK' : 'out of range'}` : `std · ${n} dec · ${n <= max ? 'OK' : 'out of range'}`) : (isExt ? 'ext · 29 bit' : 'std · 11 bit');
+  updateRawFrame();
+});
+document.getElementById('fbDlc').addEventListener('change', () => {
+  updateDlcDisabled();
+  updateRawFrame();
+});
+document.getElementById('fbFormat').addEventListener('change', e => {
+  document.getElementById('frameFormat').textContent =
+    'CAN 2.0 · ' + (e.target.value === 'ext' ? 'EXT' : 'STD');
+});
+document.getElementById('chkFd').addEventListener('change', e => {
+  const dlcSel = document.getElementById('fbDlc');
+  const fmt = document.getElementById('frameFormat');
+  if (e.target.checked) {
+    // Add CAN FD sizes
+    [12,16,20,24,32,48,64].forEach(v => {
+      if (!dlcSel.querySelector(`option[value="${v}"]`)) {
+        const o = document.createElement('option');
+        o.value = v; o.textContent = v; dlcSel.appendChild(o);
+      }
+    });
+    fmt.textContent = 'CAN FD';
+    document.getElementById('chkFdLbl').classList.add('on');
+  } else {
+    dlcSel.querySelectorAll('option').forEach(o => { if (+o.value > 8) o.remove(); });
+    if (+dlcSel.value > 8) dlcSel.value = '8';
+    fmt.textContent = 'CAN 2.0 · ' + (document.getElementById('fbFormat').value === 'ext' ? 'EXT' : 'STD');
+    document.getElementById('chkFdLbl').classList.remove('on');
+  }
+  updateDlcDisabled();
+});
+['chkRtr','chkBrs'].forEach(id => {
+  document.getElementById(id).addEventListener('change', e => {
+    document.getElementById(id + 'Lbl').classList.toggle('on', e.target.checked);
+  });
+});
+
+// ═══════════════════════════════════════════════════════════════════════
+// ACTIONS — TX
+// ═══════════════════════════════════════════════════════════════════════
+function getFrameObj() {
+  const id = document.getElementById('fbId').value.toUpperCase();
+  const dlc = parseInt(document.getElementById('fbDlc').value);
+  return {
+    id,
+    dlc,
+    format: document.getElementById('fbFormat').value,
+    rtr: document.getElementById('chkRtr').checked,
+    fd: document.getElementById('chkFd').checked,
+    brs: document.getElementById('chkBrs').checked,
+    data: state.bytes.slice(0, Math.min(dlc, 8))
+  };
+}
+
+async function sendFrame() {
+  const f = getFrameObj();
+  logMonitor('tx', f.id, f.dlc, state.bytes.slice(0, f.dlc));
+  try {
+    await fetch('/api/can/tx', {
+      method:'POST',
+      headers:{'Content-Type':'application/json'},
+      body: JSON.stringify(f)
+    });
+  } catch (e) {
+    // Endpoint may not be implemented yet — just silent fail.
+  }
+}
+
+function clearFrame() {
+  state.bytes = [0,0,0,0,0,0,0,0];
+  for (let i = 0; i < 8; i++) {
+    const inp = document.getElementById('by' + i);
+    if (inp) inp.value = '00';
+  }
+  renderBits();
+  updateRawFrame();
+  updateSignal();
+}
+
+// ═══════════════════════════════════════════════════════════════════════
+// LOOP
+// ═══════════════════════════════════════════════════════════════════════
+function openLoop() {
+  const c = document.getElementById('loopCard');
+  c.style.display = c.style.display === 'none' ? 'block' : 'none';
+}
+
+function startLoop() {
+  const f = getFrameObj();
+  const interval = parseInt(document.getElementById('loopInterval').value) || 100;
+  const count = parseInt(document.getElementById('loopCount').value) || 0;
+  const id = 'loop_' + Date.now();
+  const loop = { id, frame: f, interval, count, sent: 0 };
+  loop.timer = setInterval(() => {
+    sendFrame();
+    loop.sent++;
+    renderLoops();
+    if (loop.count > 0 && loop.sent >= loop.count) stopLoopById(loop.id);
+  }, interval);
+  state.loops.push(loop);
+  renderLoops();
+}
+
+function stopLoop() {
+  state.loops.forEach(l => clearInterval(l.timer));
+  state.loops = [];
+  renderLoops();
+}
+
+function stopLoopById(id) {
+  const l = state.loops.find(x => x.id === id);
+  if (l) { clearInterval(l.timer); state.loops = state.loops.filter(x => x.id !== id); }
+  renderLoops();
+}
+
+function renderLoops() {
+  const host = document.getElementById('activeLoops');
+  if (!state.loops.length) { host.innerHTML = ''; return; }
+  host.innerHTML = state.loops.map(l => `
+    <div class="loop-active">
+      <span class="la-info">${l.frame.id} # ${l.frame.data.map(b=>b.toString(16).toUpperCase().padStart(2,'0')).join(' ')}</span>
+      <span class="la-rate">${l.interval} ms · ${l.sent}${l.count?'/'+l.count:'/∞'}</span>
+      <button class="btn danger" style="padding:4px 8px;font-size:9px" onclick="stopLoopById('${l.id}')">Stop</button>
+    </div>
+  `).join('');
+}
+
+// ═══════════════════════════════════════════════════════════════════════
+// PRESETS
+// ═══════════════════════════════════════════════════════════════════════
+const BUILTIN_PRESETS = [
+  {cat:'OBD-II', name:'RPM (Mode 01 PID 0C)', id:'7DF', dlc:8, data:[0x02,0x01,0x0C,0,0,0,0,0]},
+  {cat:'OBD-II', name:'Vehicle Speed (PID 0D)', id:'7DF', dlc:8, data:[0x02,0x01,0x0D,0,0,0,0,0]},
+  {cat:'OBD-II', name:'Coolant Temp (PID 05)', id:'7DF', dlc:8, data:[0x02,0x01,0x05,0,0,0,0,0]},
+  {cat:'OBD-II', name:'Throttle position (PID 11)', id:'7DF', dlc:8, data:[0x02,0x01,0x11,0,0,0,0,0]},
+  {cat:'OBD-II', name:'MAF (PID 10)', id:'7DF', dlc:8, data:[0x02,0x01,0x10,0,0,0,0,0]},
+  {cat:'OBD-II', name:'Read stored DTCs', id:'7DF', dlc:8, data:[0x01,0x03,0,0,0,0,0,0]},
+  {cat:'OBD-II', name:'Clear DTCs', id:'7DF', dlc:8, data:[0x01,0x04,0,0,0,0,0,0]},
+  {cat:'UDS',    name:'DefaultSession (10 01)', id:'714', dlc:8, data:[0x02,0x10,0x01,0,0,0,0,0]},
+  {cat:'UDS',    name:'ExtendedSession (10 03)', id:'714', dlc:8, data:[0x02,0x10,0x03,0,0,0,0,0]},
+  {cat:'UDS',    name:'Coding session VAG (10 60)', id:'714', dlc:8, data:[0x02,0x10,0x60,0,0,0,0,0]},
+  {cat:'UDS',    name:'Read VIN (22 F190)', id:'714', dlc:8, data:[0x03,0x22,0xF1,0x90,0,0,0,0]},
+  {cat:'UDS',    name:'Read coding (22 0600)', id:'714', dlc:8, data:[0x03,0x22,0x06,0x00,0,0,0,0]},
+  {cat:'UDS',    name:'TesterPresent (3E 00)', id:'714', dlc:8, data:[0x02,0x3E,0x00,0,0,0,0,0]},
+  {cat:'UDS',    name:'ECU Reset — HardReset', id:'714', dlc:8, data:[0x02,0x11,0x01,0,0,0,0,0]},
+  {cat:'VAG',    name:'Rear light LIN control', id:'0A',  dlc:8, data:[0x00,0x00,0x00,0,0,0,0,0]},
+];
+
+function renderPresets() {
+  // User presets
+  const up = document.getElementById('userPresetList');
+  if (!state.presets.length) {
+    up.innerHTML = '<div class="empty">No saved packets. Construct a frame in Frame Builder and click "Save".</div>';
+  } else {
+    up.innerHTML = state.presets.map((p,i) => presetCard(p, i, true)).join('');
+  }
+
+  // Built-in
+  const bp = document.getElementById('builtinPresetList');
+  bp.innerHTML = BUILTIN_PRESETS.map((p,i) => presetCard(p, i, false)).join('');
+  document.getElementById('presetCount').textContent = BUILTIN_PRESETS.length + ' items';
+}
+
+function presetCard(p, i, user) {
+  const bytes = p.data.slice(0, p.dlc).map(b=>b.toString(16).toUpperCase().padStart(2,'0')).join(' ');
+  return `
+    <div class="preset" onclick="loadPreset(${i}, ${user})">
+      <div class="p-body">
+        <div class="p-cat">${p.cat || 'CUSTOM'}</div>
+        <div class="p-name">${p.name}</div>
+        <div class="p-frame">${p.id} # ${bytes}</div>
+      </div>
+      <div class="preset-actions" onclick="event.stopPropagation()">
+        <button class="pa-btn" title="Send" onclick="sendPresetDirect(${i}, ${user})">
+          <svg viewBox="0 0 24 24"><polygon points="5 3 19 12 5 21 5 3"/></svg>
+        </button>
+        ${user ? `<button class="pa-btn" title="Delete" onclick="deletePreset(${i})">
+          <svg viewBox="0 0 24 24"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-2 14a2 2 0 0 1-2 2H9a2 2 0 0 1-2-2L5 6"/></svg>
+        </button>` : ''}
+      </div>
+    </div>
+  `;
+}
+
+function loadPreset(i, user) {
+  const p = user ? state.presets[i] : BUILTIN_PRESETS[i];
+  if (!p) return;
+  document.getElementById('fbId').value = p.id;
+  document.getElementById('fbDlc').value = p.dlc;
+  state.bytes = [...p.data];
+  while (state.bytes.length < 8) state.bytes.push(0);
+  for (let j = 0; j < 8; j++) {
+    const inp = document.getElementById('by' + j);
+    if (inp) inp.value = state.bytes[j].toString(16).toUpperCase().padStart(2,'0');
+  }
+  renderBits();
+  updateRawFrame();
+  updateDlcDisabled();
+  updateSignal();
+  document.querySelector('.diag-tab[data-tab="builder"]').click();
+}
+
+function sendPresetDirect(i, user) {
+  loadPreset(i, user);
+  setTimeout(sendFrame, 50);
+}
+
+function savePreset() {
+  const name = prompt('Packet name:');
+  if (!name) return;
+  const f = getFrameObj();
+  state.presets.push({
+    cat:'MY', name, id:f.id, dlc:f.dlc, data:[...state.bytes]
+  });
+  persistPresets();
+  renderPresets();
+}
+
+function deletePreset(i) {
+  if (!confirm('Delete preset?')) return;
+  state.presets.splice(i, 1);
+  persistPresets();
+  renderPresets();
+}
+
+function clearAllPresets() {
+  if (!confirm('Delete ALL saved packets?')) return;
+  state.presets = [];
+  persistPresets();
+  renderPresets();
+}
+
+function persistPresets() {
+  try { /* will use backend later */ } catch (e) {}
+}
+
+// ═══════════════════════════════════════════════════════════════════════
+// MONITOR
+// ═══════════════════════════════════════════════════════════════════════
+function toggleMonitor() {
+  state.monitor.running = !state.monitor.running;
+  const btn = document.getElementById('btnMonToggle');
+  const dot = document.getElementById('monLiveDot');
+  if (state.monitor.running) {
+    btn.innerHTML = '<svg viewBox="0 0 24 24"><rect x="6" y="6" width="12" height="12"/></svg> Stop';
+    btn.classList.remove('primary');
+    btn.classList.add('danger');
+    dot.classList.remove('off');
+    dot.classList.add('live');
+    // Demo sim RX (until Flask endpoint is ready)
+    state.monitor.simTimer = setInterval(simulateRxFrame, 80);
+    state.monitor.timer = setInterval(updateMonRate, 1000);
+  } else {
+    btn.innerHTML = '<svg viewBox="0 0 24 24"><polygon points="5 3 19 12 5 21 5 3"/></svg> Start';
+    btn.classList.add('primary');
+    btn.classList.remove('danger');
+    dot.classList.add('off');
+    dot.classList.remove('live');
+    clearInterval(state.monitor.simTimer);
+    clearInterval(state.monitor.timer);
+  }
+}
+
+function simulateRxFrame() {
+  const ids = ['280','288','3C0','5A0','440','0F0','3E3','6B2'];
+  const id = ids[Math.floor(Math.random()*ids.length)];
+  const data = Array.from({length:8}, ()=>Math.floor(Math.random()*256));
+  logMonitor('rx', id, 8, data);
+}
+
+function logMonitor(dir, id, dlc, data) {
+  const now = new Date();
+  const ts = now.toTimeString().slice(0,8) + '.' + String(now.getMilliseconds()).padStart(3,'0');
+  const frame = { ts, dir, id, dlc, data: [...data], t: now.getTime() };
+  state.monitor.frames.push(frame);
+  state.monitor.rateWindow.push(frame.t);
+  if (state.monitor.frames.length > 500) state.monitor.frames.shift();
+  renderMonLine(frame);
+  document.getElementById('monCount').textContent = state.monitor.frames.length;
+}
+
+function renderMonLine(f) {
+  // Filters
+  const fId = document.getElementById('filterId').value.trim().toUpperCase();
+  const fData = document.getElementById('filterData').value.trim().toUpperCase();
+  if (fId && !fId.split(',').map(s=>s.trim()).includes(f.id.toUpperCase())) return;
+  const dataStr = f.data.map(b=>b.toString(16).toUpperCase().padStart(2,'0')).join(' ');
+  if (fData && !dataStr.includes(fData)) return;
+
+  const log = document.getElementById('monLog');
+  const line = document.createElement('div');
+  line.className = 'log-line';
+  line.innerHTML = `
+    <span class="lg-ts">${f.ts}</span>
+    <span class="lg-dir ${f.dir}">${f.dir.toUpperCase()}</span>
+    <span class="lg-id">${f.id}</span>
+    <span class="lg-dlc">[${f.dlc}]</span>
+    <span class="lg-data">${dataStr}</span>
+  `;
+  log.appendChild(line);
+  // Remove initial placeholder
+  const first = log.firstElementChild;
+  if (first && first.querySelector('.lg-dir.sys') && log.children.length > 1) {
+    first.remove();
+  }
+  while (log.children.length > 400) log.removeChild(log.firstChild);
+  if (document.getElementById('autoScroll').checked) log.scrollTop = log.scrollHeight;
+}
+
+function updateMonRate() {
+  const now = Date.now();
+  state.monitor.rateWindow = state.monitor.rateWindow.filter(t => now - t < 1000);
+  document.getElementById('monRate').textContent = state.monitor.rateWindow.length;
+}
+
+function clearMonitor() {
+  state.monitor.frames = [];
+  document.getElementById('monLog').innerHTML = '';
+  document.getElementById('monCount').textContent = '0';
+}
+
+function exportMonitor() {
+  const rows = [['timestamp','dir','id','dlc','data']];
+  state.monitor.frames.forEach(f => {
+    rows.push([f.ts, f.dir, f.id, f.dlc,
+      f.data.map(b=>b.toString(16).toUpperCase().padStart(2,'0')).join(' ')]);
+  });
+  const csv = rows.map(r => r.join(';')).join('\n');
+  const blob = new Blob([csv], {type:'text/csv'});
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = 'can_log_' + Date.now() + '.csv';
+  a.click();
+}
+
+// Filter live update
+['filterId','filterData'].forEach(id => {
+  document.getElementById(id).addEventListener('input', () => {
+    document.getElementById('monLog').innerHTML = '';
+    state.monitor.frames.forEach(renderMonLine);
+  });
+});
+document.getElementById('autoScroll').addEventListener('change', e => {
+  document.getElementById('autoScrollLbl').classList.toggle('on', e.target.checked);
+});
+document.getElementById('pauseOnRx').addEventListener('change', e => {
+  document.getElementById('pauseOnRxLbl').classList.toggle('on', e.target.checked);
+});
+
+// ═══════════════════════════════════════════════════════════════════════
+// UDS
+// ═══════════════════════════════════════════════════════════════════════
+function onUdsSidChange() {
+  const sid = document.getElementById('udsSid').value;
+  const sub = document.getElementById('udsSub');
+  const hint = document.getElementById('udsSubHint');
+  const defaults = {
+    '10': {v:'03', h:'01=Default, 02=Programming, 03=Extended, 60=Coding'},
+    '11': {v:'01', h:'01=Hard, 02=Key-Off-On, 03=Soft'},
+    '22': {v:'F190', h:'DID (2 bytes) — e.g. F190 = VIN'},
+    '27': {v:'01', h:'Level: 01=req seed, 02=send key'},
+    '28': {v:'01', h:'CtrlType: 00=enable, 01=disable rx/tx'},
+    '2E': {v:'F190', h:'DID + value to write'},
+    '31': {v:'0103', h:'routineCtrl (01=start) + RID (2B)'},
+    '3E': {v:'00', h:'00=zeroSubFunction (with response)'},
+    '85': {v:'02', h:'01=ON, 02=OFF DTC settings'},
+  };
+  const d = defaults[sid];
+  if (d) { sub.value = d.v; hint.textContent = d.h; }
+}
+
+function buildUdsPayload() {
+  const sid = document.getElementById('udsSid').value;
+  const sub = document.getElementById('udsSub').value.replace(/\s+/g,'');
+  const extra = document.getElementById('udsExtra').value.replace(/\s+/g,'');
+  let payload = sid + sub + extra;
+  if (payload.length % 2) payload = '0' + payload;
+  const bytes = [];
+  for (let i = 0; i < payload.length; i += 2) bytes.push(parseInt(payload.substr(i,2), 16));
+  // ISO-TP single frame: [len, ...payload]
+  const frame = [bytes.length, ...bytes];
+  while (frame.length < 8) frame.push(0);
+  return frame.slice(0, 8);
+}
+
+async function sendUds() {
+  const isFunc = document.getElementById('udsAddr').value === 'func';
+  const reqId = isFunc ? '7DF' : document.getElementById('udsReqId').value.toUpperCase();
+  const payload = buildUdsPayload();
+  logMonitor('tx', reqId, 8, payload);
+  document.getElementById('udsRespStatus').className = 'status-chip warn';
+  document.getElementById('udsRespStatus').textContent = 'Waiting for response…';
+
+  try {
+    const r = await fetch('/api/uds/tx', {
+      method:'POST',
+      headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({reqId, data: payload})
+    });
+    const j = await r.json();
+    showUdsResp(j);
+  } catch (e) {
+    // Simulated response — until Flask endpoint is ready
+    setTimeout(() => {
+      const sid = document.getElementById('udsSid').value;
+      const respSid = (parseInt(sid,16) + 0x40).toString(16).toUpperCase().padStart(2,'0');
+      const sub = document.getElementById('udsSub').value;
+      showUdsResp({
+        ok: true,
+        resId: document.getElementById('udsResId').value,
+        bytes: [0x06, parseInt(respSid,16), ...stringToBytes(sub), 0x01, 0x02, 0x03]
+      });
+    }, 180);
+  }
+}
+
+function stringToBytes(s) {
+  s = s.replace(/\s+/g,'');
+  const a = [];
+  for (let i = 0; i < s.length; i += 2) a.push(parseInt(s.substr(i,2), 16));
+  return a;
+}
+
+function showUdsResp(j) {
+  const box = document.getElementById('udsResp');
+  const stat = document.getElementById('udsRespStatus');
+  const dec = document.getElementById('udsDecoded');
+  if (!j || !j.ok) {
+    stat.className = 'status-chip err';
+    stat.textContent = 'Error / timeout';
+    box.innerHTML = '<span style="color:var(--bmw-red)">No response or error.</span>';
+    return;
+  }
+  stat.className = 'status-chip ok';
+  stat.textContent = 'Positive · ' + j.resId;
+  const hexStr = j.bytes.map(b => b.toString(16).toUpperCase().padStart(2,'0')).join(' ');
+  box.innerHTML = `
+    <div><span style="color:var(--primary)">${j.resId}</span>
+    <span style="color:var(--muted-foreground)"> # </span>${hexStr}</div>
+  `;
+  // Decode
+  const sid = j.bytes[1];
+  if (sid === 0x7F) {
+    dec.innerHTML = `<span style="color:var(--bmw-red)">Negative response · NRC ${j.bytes[3].toString(16).toUpperCase().padStart(2,'0')}</span>`;
+  } else if (sid === 0x62) {
+    dec.innerHTML = `<span style="color:var(--status-ok)">ReadDataByIdentifier OK</span> · DID ${j.bytes[2].toString(16).toUpperCase()}${j.bytes[3].toString(16).toUpperCase().padStart(2,'0')}`;
+  } else {
+    dec.textContent = 'Positive response · SID 0x' + sid.toString(16).toUpperCase();
+  }
+  logMonitor('rx', j.resId, 8, j.bytes);
+}
+
+function udsTesterPresent() {
+  document.getElementById('udsSid').value = '3E';
+  onUdsSidChange();
+  sendUds();
+}
+
+function udsReset() {
+  if (!confirm('Really perform ECU hard-reset?')) return;
+  document.getElementById('udsSid').value = '11';
+  onUdsSidChange();
+  sendUds();
+}
+
+function setSession(sub) {
+  document.getElementById('udsSid').value = '10';
+  document.getElementById('udsSub').value = sub;
+  document.getElementById('udsExtra').value = '';
+  sendUds();
+  const names = {'01':'Default','02':'Programming','03':'Extended','60':'Coding (VAG)'};
+  document.getElementById('udsSession').textContent = (names[sub] || sub) + 'Session';
+}
+
+function readDtc() {
+  // Simulation — until endpoint is ready
+  const dtcs = [
+    {code:'P0420', severity:'warn', desc:'Catalyst System Efficiency Below Threshold'},
+    {code:'U0100', severity:'err', desc:'Lost Communication with ECM/PCM'},
+    {code:'B1234', severity:'warn', desc:'Body · Pending'},
+  ];
+  const host = document.getElementById('dtcList');
+  host.innerHTML = dtcs.map(d => `
+    <div class="alarm-full ${d.severity === 'err' ? 'critical' : 'warning'}" style="margin-bottom:6px;padding:10px">
+      <div class="af-icon">
+        <svg viewBox="0 0 24 24"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
+      </div>
+      <div class="af-body" style="flex:1">
+        <div class="af-level">${d.code}</div>
+        <div class="af-msg">${d.desc}</div>
+      </div>
+      <button class="btn ghost" style="padding:5px 9px" onclick="this.parentElement.remove()">✕</button>
+    </div>
+  `).join('');
+}
+
+function clearDtc() {
+  if (!confirm('Clear DTCs in ECU? (Service 0x14 / 0x04)')) return;
+  document.getElementById('dtcList').innerHTML = '<div class="empty empty-sm">DTCs cleared (simulated).</div>';
+}
+
+// ═══════════════════════════════════════════════════════════════════════
+// SERIAL
+// ═══════════════════════════════════════════════════════════════════════
+function toggleSerial() {
+  state.serial.connected = !state.serial.connected;
+  const btn = document.getElementById('btnSerialToggle');
+  if (state.serial.connected) {
+    btn.textContent = 'Disconnect';
+    btn.classList.remove('primary');
+    btn.classList.add('danger');
+    // Placeholder stream
+    logSerial('sys', '=== Connected ' + document.getElementById('serialBaud').value + ' baud ===');
+    state.serial.timer = setInterval(() => {
+      const msgs = [
+        '[CAN] RX 280 # 00 08 27 4A 00 00 00 00',
+        '[SIM] +CSQ: 28,99',
+        '[GPS] Fix: 50.0755, 14.4378 · 8 sats',
+        '[OBD] RPM=1850 · Speed=42 km/h',
+        '[HTTP] POST /data · 200 OK (142ms)',
+      ];
+      logSerial('rx', msgs[Math.floor(Math.random()*msgs.length)]);
+    }, 900);
+  } else {
+    btn.textContent = 'Connect';
+    btn.classList.add('primary');
+    btn.classList.remove('danger');
+    logSerial('sys', '=== Disconnected ===');
+    clearInterval(state.serial.timer);
+  }
+}
+
+function logSerial(dir, text) {
+  const now = new Date();
+  const ts = now.toTimeString().slice(0,8) + '.' + String(now.getMilliseconds()).padStart(3,'0');
+  const log = document.getElementById('serialLog');
+  const showTs = document.getElementById('serialTs').checked;
+  const line = document.createElement('div');
+  line.className = 'log-line';
+  line.style.gridTemplateColumns = showTs ? '72px 36px 1fr' : '36px 1fr';
+  line.innerHTML = showTs
+    ? `<span class="lg-ts">${ts}</span><span class="lg-dir ${dir}">${dir.toUpperCase()}</span><span class="lg-data">${text}</span>`
+    : `<span class="lg-dir ${dir}">${dir.toUpperCase()}</span><span class="lg-data">${text}</span>`;
+  log.appendChild(line);
+  // Remove placeholder
+  const first = log.firstElementChild;
+  if (first && first.textContent.includes('Not connected') && log.children.length > 1) first.remove();
+  while (log.children.length > 300) log.removeChild(log.firstChild);
+  if (document.getElementById('serialAutoScroll').checked) log.scrollTop = log.scrollHeight;
+}
+
+function serialSend() {
+  const inp = document.getElementById('serialTxInput');
+  const text = inp.value.trim();
+  if (!text) return;
+  logSerial('tx', text);
+  inp.value = '';
+}
+// ═══════════════════════════════════════════════════════════════════════
+// Log out
+// ═══════════════════════════════════════════════════════════════════════
+function logout() {
+  if (!confirm('Really log out?')) return;
+  sessionStorage.removeItem('vc_diag_session');
+  localStorage.removeItem('vc_diag_session');
+  location.replace('login.html');
+}
+
+function clearSerial() { document.getElementById('serialLog').innerHTML = ''; }
+function exportSerial() {
+  const lines = Array.from(document.getElementById('serialLog').children).map(l => l.textContent);
+  const blob = new Blob([lines.join('\n')], {type:'text/plain'});
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = 'serial_' + Date.now() + '.log';
+  a.click();
+}
+
+// ═══════════════════════════════════════════════════════════════════════
+// BAUD RATE
+// ═══════════════════════════════════════════════════════════════════════
+async function onBaudChange() {
+  const sel = document.getElementById('busBaud');
+  const customInp = document.getElementById('busBaudCustom');
+  if (sel.value === 'custom') {
+    customInp.style.display = 'inline-block';
+    customInp.focus();
+    return;
+  }
+  customInp.style.display = 'none';
+  applyBaud(parseInt(sel.value));
+}
+
+document.getElementById('busBaudCustom').addEventListener('change', e => {
+  const v = parseInt(e.target.value);
+  if (v >= 5000 && v <= 8000000) applyBaud(v);
+});
+
+async function applyBaud(bps) {
+  try {
+    await fetch('/api/can/config', {
+      method: 'POST',
+      headers: {'Content-Type':'application/json'},
+      body: JSON.stringify({bitrate: bps})
+    });
+    logMonitor('sys', '----', 0, []);
+  } catch (e) {
+    // Flask endpoint not ready yet — continue silently
+  }
+  // Log to monitor
+  const note = { ts: new Date().toTimeString().slice(0,12), dir:'sys',
+                  id:'----', dlc:0, data:[], t: Date.now() };
+  const log = document.getElementById('monLog');
+  const line = document.createElement('div');
+  line.className = 'log-line';
+  line.innerHTML = `
+    <span class="lg-ts">${note.ts}</span>
+    <span class="lg-dir sys">SYS</span>
+    <span class="lg-id">----</span>
+    <span class="lg-dlc">-</span>
+    <span class="lg-data" style="color:var(--primary)">CAN bitrate set to ${(bps/1000).toFixed(0)} kbit/s</span>
+  `;
+  log.appendChild(line);
+  if (document.getElementById('autoScroll').checked) log.scrollTop = log.scrollHeight;
+}
+
+// ═══════════════════════════════════════════════════════════════════════
+// INIT
+// ═══════════════════════════════════════════════════════════════════════
+initByteMatrix();
+renderBits();
+updateRawFrame();
+updateSignal();
+renderPresets();
+</script>
+</body>
+</html>

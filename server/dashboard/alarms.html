@@ -1,0 +1,394 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Alarms — OBD-II</title>
+<script>
+  // Apply saved theme before render — prevents dark→light flash on page load
+  (function() {
+    const t = localStorage.getItem('obd_theme');
+    if (t === 'light') document.documentElement.setAttribute('data-theme', 'light');
+  })();
+</script>
+
+
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600;700&family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="style.css">
+<style>
+/* ── ALARM ITEMS ─────────────────────────────────────────────── */
+.alarm-active {
+  border-radius: var(--radius);
+  padding: 14px 16px;
+  margin-bottom: 10px;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+.alarm-active.critical { background: hsla(0,85%,55%,.08); border: 1px solid hsla(0,85%,55%,.3); }
+.alarm-active.warning  { background: hsla(25,100%,55%,.08); border: 1px solid hsla(25,100%,55%,.3); }
+.alarm-active .aa-icon { width: 36px; height: 36px; border-radius: 8px; display: flex; align-items: center; justify-content: center; flex-shrink: 0; }
+.alarm-active.critical .aa-icon { background: hsla(0,85%,55%,.15); }
+.alarm-active.warning  .aa-icon { background: hsla(25,100%,55%,.15); }
+.alarm-active .aa-icon svg { width: 18px; height: 18px; stroke: currentColor; fill: none; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
+.alarm-active.critical .aa-icon svg { color: var(--bmw-red); }
+.alarm-active.warning  .aa-icon svg { color: var(--bmw-orange); }
+.alarm-active .aa-body { flex: 1 }
+.alarm-active .aa-level { font-size: 9px; font-weight: 700; letter-spacing: .15em; text-transform: uppercase; }
+.alarm-active.critical .aa-level { color: var(--bmw-red); }
+.alarm-active.warning  .aa-level { color: var(--bmw-orange); }
+.alarm-active .aa-msg { font-size: 13px; color: var(--foreground); margin-top: 2px; }
+.alarm-active .aa-val { font-family: 'JetBrains Mono', monospace; font-size: 18px; font-weight: 700; }
+.alarm-active.critical .aa-val { color: var(--bmw-red); }
+.alarm-active.warning  .aa-val { color: var(--bmw-orange); }
+
+/* ── ALARM CONFIG ROWS ───────────────────────────────────────── */
+.alarm-cfg {
+  border-radius: var(--radius);
+  padding: 14px 16px;
+  margin-bottom: 8px;
+  display: flex;
+  align-items: center;
+  gap: 14px;
+}
+.alarm-cfg .ac-info { flex: 1 }
+
+/* Název alarmu — např. "Otáčky motoru" */
+.alarm-cfg .ac-label { font-size: 13px; font-weight: 600; color: var(--foreground); }
+
+/* Popis pod názvem — např. "Alarm při překročení..." */
+.alarm-cfg .ac-desc  { font-size: 12px; color: var(--muted-foreground); margin-top: 2px; }
+
+/* Doporučená hodnota — modře pod popisem */
+.alarm-cfg .ac-recommended { font-size: 12px; color: var(--primary); margin-top: 3px; font-family: 'JetBrains Mono', monospace; }
+
+/* Obal pro input + jednotku */
+.alarm-cfg .ac-input-wrap { display: flex; flex-direction: column; align-items: center; gap: 3px; }
+
+/* Číselné pole pro nastavení limitu */
+.alarm-cfg input[type="number"] {
+  width: 80px; padding: 6px 8px; border-radius: 8px;
+  border: 1px solid var(--border); background: var(--secondary);
+  color: var(--foreground); font-family: 'JetBrains Mono', monospace;
+  font-size: 13px; text-align: center; outline: none; transition: border-color .2s;
+}
+.alarm-cfg input[type="number"]:focus { border-color: var(--primary); }
+
+/* Jednotka pod inputem — např. "rpm", "°C" */
+.alarm-cfg .ac-unit { font-size: 12px; color: var(--muted-foreground); letter-spacing: .1em; text-transform: uppercase; }
+
+/* ── TOGGLE SWITCH ───────────────────────────────────────────── */
+.toggle-wrap { position: relative; width: 40px; height: 22px; flex-shrink: 0; }
+.toggle-wrap input { opacity: 0; width: 0; height: 0; position: absolute; }
+.toggle-slider {
+  position: absolute; inset: 0; border-radius: 99px;
+  background: var(--secondary); border: 1px solid var(--border);
+  cursor: pointer; transition: all .2s;
+}
+.toggle-slider::before {
+  content: ''; position: absolute;
+  width: 16px; height: 16px; border-radius: 50%;
+  left: 2px; top: 2px;
+  background: var(--muted-foreground);
+  transition: all .2s;
+}
+.toggle-wrap input:checked + .toggle-slider { background: hsla(213,85%,47%,.2); border-color: var(--primary); }
+.toggle-wrap input:checked + .toggle-slider::before { transform: translateX(18px); background: var(--primary); }
+
+/* ── SAVE BUTTON ─────────────────────────────────────────────── */
+.save-btn {
+  width: 100%; padding: 12px; border-radius: var(--radius);
+  background: var(--primary); color: white;
+  border: none; cursor: pointer; font-size: 13px; font-weight: 700;
+  letter-spacing: .1em; text-transform: uppercase; transition: opacity .2s;
+  margin-top: 4px;
+}
+.save-btn:hover { opacity: .85; }
+.save-btn:active { opacity: .7; }
+
+/* Shield empty state */
+.shield-ok { text-align: center; padding: 24px; }
+.shield-ok svg { width: 40px; height: 40px; stroke: var(--status-ok); opacity: .4; margin: 0 auto 8px; display: block; fill: none; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
+.shield-ok p { font-size: 13px; color: var(--status-ok); font-weight: 600; }
+.shield-ok span { font-size: 11px; color: var(--muted-foreground); display: block; margin-top: 3px; }
+</style>
+</head>
+<body>
+
+<!-- ══ Theme BUTTON ══════════════════════════════════════════════════════ -->
+  <button class="theme-toggle" onclick="toggleTheme()" aria-label="Toggle theme">
+  <svg class="icon-moon" viewBox="0 0 24 24"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/></svg>
+  <svg class="icon-sun" viewBox="0 0 24 24"><circle cx="12" cy="12" r="5"/><line x1="12" y1="1" x2="12" y2="3"/><line x1="12" y1="21" x2="12" y2="23"/><line x1="4.22" y1="4.22" x2="5.64" y2="5.64"/><line x1="18.36" y1="18.36" x2="19.78" y2="19.78"/><line x1="1" y1="12" x2="3" y2="12"/><line x1="21" y1="12" x2="23" y2="12"/><line x1="4.22" y1="19.78" x2="5.64" y2="18.36"/><line x1="18.36" y1="5.64" x2="19.78" y2="4.22"/></svg>
+</button>
+<script>
+  function toggleTheme() {
+    const cur = document.documentElement.getAttribute('data-theme');
+    const next = cur === 'light' ? 'dark' : 'light';
+    if (next === 'light') {
+      document.documentElement.setAttribute('data-theme', 'light');
+      localStorage.setItem('obd_theme', 'light');
+    } else {
+      document.documentElement.removeAttribute('data-theme');
+      localStorage.setItem('obd_theme', 'dark');
+    }
+  }
+</script>  
+
+<div class="page active" style="display:block">
+
+  <div class="page-header">
+    <a href="dashboard.html" class="back-btn">
+      <svg viewBox="0 0 24 24"><polyline points="15 18 9 12 15 6"/></svg>
+    </a>
+    <div>
+      <div class="page-title">Alarms</div>
+      <div class="page-subtitle">Active notifications & settings</div>
+    </div>
+  </div>
+
+  <!-- Aktivní alarmy -->
+  <div class="section-title">Active alarms</div>
+  <div id="active-alarms" style="margin-bottom:24px"></div>
+
+  <!-- Nastavení limitů -->
+  <div class="section-title">Limit settings</div>
+  <div id="alarm-config" style="margin-bottom:20px"></div>
+
+  <button class="save-btn" id="save-btn">💾 Save settings</button>
+  <div id="save-msg" style="text-align:center;font-size:11px;color:var(--status-ok);margin-top:8px;opacity:0;transition:opacity .3s"></div>
+
+</div>
+
+<!-- Bottom nav -->
+<nav class="bottom-nav">
+  <div class="nav-inner">
+    <button class="nav-item" id="nb-cockpit" onclick="window.location.href='dashboard.html'">
+      <svg viewBox="0 0 24 24"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/></svg>
+      <span class="nav-label">Cockpit</span>
+    </button>
+    <button class="nav-item" id="nb-vehicle-data" onclick="window.location.href='vehicle-data.html'">
+      <svg viewBox="0 0 24 24"><ellipse cx="12" cy="5" rx="9" ry="3"/><path d="M21 12c0 1.66-4 3-9 3s-9-1.34-9-3"/><path d="M3 5v14c0 1.66 4 3 9 3s9-1.34 9-3V5"/></svg>
+      <span class="nav-label">Data</span>
+    </button>
+    <button class="nav-item" id="nb-graphs" onclick="window.location.href='graphs.html'">
+      <svg viewBox="0 0 24 24"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg>
+      <span class="nav-label">Graphs</span>
+    </button>
+    <button class="nav-item active" id="nb-alarms" onclick="window.location.href='alarms.html'">
+      <svg viewBox="0 0 24 24"><path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 0 1-3.46 0"/></svg>
+      <span class="nav-label">Alarms</span>
+    </button>
+    <button class="nav-item" id="nb-consumption" onclick="window.location.href='consumption.html'">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <path d="M14 3H5a1 1 0 0 0-1 1v16a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1V9"/>
+        <path d="M14 3v6h4"/>
+        <path d="M18 9l3-3"/>
+        <path d="M21 6V3h-3"/>
+        <line x1="7" y1="13" x2="15" y2="13"/>
+        <line x1="7" y1="17" x2="15" y2="17"/>
+      </svg>
+      <span class="nav-label">Consumption</span>
+    </button>
+
+    <button class="nav-item" id="nb-map" onclick="window.location.href='map.html'">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <polygon points="1 6 1 22 8 18 16 22 23 18 23 2 16 6 8 2 1 6"/>
+        <line x1="8" y1="2" x2="8" y2="18"/>
+        <line x1="16" y1="6" x2="16" y2="22"/>
+      </svg>
+      <span class="nav-label">Map</span>
+    </button>
+  </div>
+</nav>
+
+<script type="module">
+import { getData, isStale } from './data.js';
+
+// ── Definice alarmů ───────────────────────────────────────────────
+const ALARM_DEFS = [
+  {
+    id: 'rpm', key: 'rpm', label: 'Engine RPM', unit: 'rpm',
+    desc: 'Alarm when maximum RPM is exceeded',
+    recommended: 6500, defaultThreshold: 6500,
+    level: 'critical',
+    compare: 'above',
+    check: (v, t) => v > t,
+    format: v => Math.round(v) + ' rpm',
+  },
+  {
+    id: 'coolant', key: 'coolantTemp', label: 'Coolant temperature', unit: '°C',
+    desc: 'Alarm when engine coolant overheats',
+    recommended: 100, defaultThreshold: 100,
+    level: 'critical',
+    compare: 'above',
+    check: (v, t) => v > t,
+    format: v => v.toFixed(1) + '°C',
+  },
+  {
+    id: 'voltage', key: 'systemVoltage', label: 'System voltage', unit: 'V',
+    desc: 'Alarm when voltage drops below limit',
+    recommended: 12.5, defaultThreshold: 12.5,
+    level: 'warning',
+    compare: 'below',
+    check: (v, t) => v < t,
+    format: v => v.toFixed(1) + 'V',
+  },
+  {
+    id: 'load', key: 'engineLoad', label: 'Engine load', unit: '%',
+    desc: 'Alarm during long-term high load',
+    recommended: 85, defaultThreshold: 85,
+    level: 'warning',
+    compare: 'above',
+    check: (v, t) => v > t,
+    format: v => v.toFixed(0) + '%',
+  },
+  {
+    id: 'catalyst', key: 'catalystTemp', label: 'Catalyst temperature', unit: '°C',
+    desc: 'Alarm when catalyst overheats',
+    recommended: 600, defaultThreshold: 600,
+    level: 'critical',
+    compare: 'above',
+    check: (v, t) => v > t,
+    format: v => v.toFixed(0) + '°C',
+  },
+  {
+    id: 'speed', key: 'speed', label: 'Speed', unit: 'km/h',
+    desc: 'Alarm when set speed is exceeded',
+    recommended: 160, defaultThreshold: 160,
+    level: 'warning',
+    compare: 'above',
+    check: (v, t) => v > t,
+    format: v => Math.round(v) + ' km/h',
+  },
+];
+
+// ── localStorage ──────────────────────────────────────────────────
+const STORAGE_KEY = 'obd_alarm_config';
+const SMS_KEY = 'obd_sms_config';
+
+function loadConfig() {
+  try { return JSON.parse(localStorage.getItem(STORAGE_KEY)) || {}; }
+  catch { return {}; }
+}
+function saveConfig(cfg) { localStorage.setItem(STORAGE_KEY, JSON.stringify(cfg)); }
+function loadSms() {
+  try { return JSON.parse(localStorage.getItem(SMS_KEY)) || { enabled: false, number: '' }; }
+  catch { return { enabled: false, number: '' }; }
+}
+
+let config = loadConfig();
+
+// defaults pro nové alarmy
+ALARM_DEFS.forEach(a => {
+  if (!config[a.id]) config[a.id] = { enabled: true, threshold: a.defaultThreshold };
+});
+
+// ── Render alarm config ───────────────────────────────────────────
+const warnSvg = `<svg viewBox="0 0 24 24"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>`;
+
+function renderConfig(data) {
+  const container = document.getElementById('alarm-config');
+  // Zobraz jen alarmy pro PIDy které auto podporuje
+  const available = ALARM_DEFS.filter(a => data[a.key] != null);
+
+  container.innerHTML = available.map(a => {
+    const cfg = config[a.id];
+    const levelColor = a.level === 'critical' ? 'var(--bmw-red)' : 'var(--bmw-orange)';
+    const compareText = a.compare === 'above' ? '↑ above' : '↓ below';
+    return `
+    <div class="alarm-cfg glass-card">
+      <div class="aa-icon" style="background:${a.level==='critical'?'hsla(0,85%,55%,.12)':'hsla(25,100%,55%,.12)'};border-radius:8px;width:36px;height:36px;display:flex;align-items:center;justify-content:center;flex-shrink:0">
+        <svg viewBox="0 0 24 24" style="width:18px;height:18px;stroke:${levelColor};fill:none;stroke-width:2;stroke-linecap:round;stroke-linejoin:round">
+          <path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/>
+          <line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/>
+        </svg>
+      </div>
+      <div class="ac-info">
+        <div class="ac-label">${a.label}</div>
+        <div class="ac-desc">${a.desc}</div>
+        <div class="ac-recommended">Recommended: ${compareText} ${a.recommended} ${a.unit}</div>
+      </div>
+      <div class="ac-input-wrap">
+        <input type="number" step="0.1" value="${cfg.threshold}" id="input-${a.id}">
+        <div class="ac-unit">${a.unit}</div>
+      </div>
+      <label class="toggle-wrap">
+        <input type="checkbox" id="toggle-${a.id}" ${cfg.enabled ? 'checked' : ''}>
+        <span class="toggle-slider"></span>
+      </label>
+    </div>`;
+  }).join('');
+}
+
+// ── Aktivní alarmy ────────────────────────────────────────────────
+function renderActive(data) {
+  const container = document.getElementById('active-alarms');
+  const active = ALARM_DEFS.filter(a => {
+    const cfg = config[a.id];
+    return cfg?.enabled && data[a.key] != null && a.check(data[a.key], cfg.threshold);
+  });
+  
+  if (!active.length) {
+    const noData = !isDataAvailable(data);
+    container.innerHTML = noData
+      ? `<div class="shield-ok glass-card">
+          <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><line x1="4.93" y1="4.93" x2="19.07" y2="19.07"/></svg>
+          <p style="color:hsl(215,15%,50%)">No data available</p>
+          <span>Sniffer not connected</span>
+        </div>`
+      : `<div class="shield-ok glass-card">
+          <svg viewBox="0 0 24 24"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>
+          <p>All systems normal</p>
+          <span>No active alarms</span>
+        </div>`;
+    return;
+  }
+
+  container.innerHTML = active.map(a => `
+    <div class="alarm-active ${a.level}">
+      <div class="aa-icon">${warnSvg}</div>
+      <div class="aa-body">
+        <div class="aa-level">${a.level === 'critical' ? 'CRITICAL' : 'WARNING'}</div>
+        <div class="aa-msg">${a.label}</div>
+      </div>
+      <div class="aa-val">${a.format(data[a.key])}</div>
+    </div>`).join('');
+}
+
+// ── Uložit nastavení ─────────────────────────────────────────────
+document.getElementById('save-btn').addEventListener('click', () => {
+  ALARM_DEFS.forEach(a => {
+    const input  = document.getElementById(`input-${a.id}`);
+    const toggle = document.getElementById(`toggle-${a.id}`);
+    if (!input) return;
+    config[a.id] = {
+      enabled:   toggle.checked,
+      threshold: parseFloat(input.value),
+    };
+  });
+  saveConfig(config);
+
+  // Feedback
+  const msg = document.getElementById('save-msg');
+  msg.textContent = '✓ Settings saved';
+  msg.style.opacity = '1';
+  setTimeout(() => msg.style.opacity = '0', 2500);
+});
+
+// ── Hlavní smyčka ─────────────────────────────────────────────────
+let rendered = false;
+function isDataAvailable(d) {
+  return d && Object.keys(d).filter(k => !k.startsWith('_')).length > 0;
+}
+function update() {
+  const d = getData();
+  if (!rendered) { renderConfig(d); rendered = true; }
+  renderActive(d);
+}
+
+setInterval(update, 500);
+update();
+</script>
+</body>
+</html>
