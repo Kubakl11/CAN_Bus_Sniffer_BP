@@ -2,7 +2,7 @@
 
 > **Design and Implementation of a System for CAN Bus Data Analysis in Automotive Monitoring**
 >
-> Czech Technical University in Prague · Faculty of Electrical Engineering · 2025
+> Czech Technical University in Prague · Faculty of Electrical Engineering · 2026
 
 ---
 
@@ -113,5 +113,5 @@ Written in **LaTeX** using the `ctuthesis` template. The thesis covers a review 
 ---
 
 <p align="center">
-  <sub>Jakub Klášterka · CTU FEE Prague · 2025</sub>
+  <sub>Jakub Klášterka · CTU FEE Prague · 2026</sub>
 </p>
